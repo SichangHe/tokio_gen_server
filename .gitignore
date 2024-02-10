@@ -1,0 +1,90 @@
+# Artifacts
+**.dart_tool/
+**.flutter*
+**.ipynb_checkpoints/
+**.pyc
+**__pycache__/
+**build/
+
+# Auxiliary files
+**.bak
+**.tmp
+
+# Databases
+**.db*
+**.sqlite*
+
+# Documents
+**.csv
+**.doc*
+**.pdf
+**.ppt*
+**.txt
+**.vsd*
+**.xls*
+
+# File managers
+**.DS_Store
+**.Trash*
+**.directory
+**esktop.ini
+
+# Images
+**.3dm
+**.apng
+**.bmp
+**.dib
+**.gif
+**.hdp
+**.ico
+**.j2k
+**.jfi
+**.jfif
+**.jif
+**.jp2
+**.jpe
+**.jpeg
+**.jpf
+**.jpg
+**.jpm
+**.jpx
+**.jxr
+**.max
+**.mj2
+**.mng
+**.pdf
+**.png
+**.raw
+**.svg
+**.svgz
+**.tif
+**.tiff
+**.wdp
+**.webp
+**.xbm
+
+# LaTeX
+**(busy)
+**.aux
+**.bbl
+**.bcf
+**.blg
+**.dvi
+**.fdb_latexmk
+**.fls
+**.gz
+**.lof
+**.log
+**.lot
+**.out
+**.pdf
+**.synctex.gz
+**.toc
+**.xcp
+**.xdv
+**.xml
+**blx.bib
+**comment.cut
+
+# Specific
+target/
