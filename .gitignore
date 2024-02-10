@@ -87,4 +87,5 @@
 **comment.cut
 
 # Specific
+**.lock
 target/

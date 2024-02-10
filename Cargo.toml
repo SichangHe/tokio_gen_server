@@ -11,3 +11,11 @@ repository = "https://github.com/SichangHe/tokio_gen_server"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = { version = "1.0", features = ["backtrace"] }
+tokio = { version = "1", features = [
+    "macros",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+tokio-util = "0.7"
