@@ -11,7 +11,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-pub use actor::{Actor, Ref};
+pub use actor::{Actor, ActorExt, Ref};
 
 pub mod actor;
 #[cfg(test)]

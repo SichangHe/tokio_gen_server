@@ -22,6 +22,8 @@ impl<A: Actor> Ref<A> {
     }
 
     pub async fn call(&mut self, msg: A::CallMsg) -> Result<A::Reply> {
+        // NB: Using the `oneshot` channel here is inexpensive because its only
+        // overhead is 1 `Arc` and 5 extra words of allocation.
         let (reply_sender, reply_receiver) = oneshot::channel();
         self.msg_sender
             .send(Msg::Call(msg, reply_sender))
@@ -78,7 +80,7 @@ pub enum Msg<A: Actor> {
 /// use anyhow::Result;
 /// use std::time::Duration;
 /// use tokio::{sync::oneshot, time::timeout};
-/// use tokio_gen_server::{Actor, Ref};
+/// use tokio_gen_server::*;
 ///
 /// #[derive(Debug, Default)]
 /// struct PingPongServer {
@@ -174,57 +176,92 @@ pub trait Actor: Sized + Send + 'static {
     ) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
     }
+}
+
+/// Provides convenience methods for [`Actor`].
+pub trait ActorExt: Sized {
+    type Ref;
+    type Msg;
 
     fn handle_call_or_cast(
         &mut self,
-        msg: Msg<Self>,
-        env: &mut Ref<Self>,
-    ) -> impl Future<Output = Result<()>> + Send {
-        async move {
-            match msg {
-                Msg::Call(msg, reply_sender) => self.handle_call(msg, env, reply_sender).await,
-                Msg::Cast(msg) => self.handle_cast(msg, env).await,
-            }
-        }
-    }
+        msg: Self::Msg,
+        env: &mut Self::Ref,
+    ) -> impl Future<Output = Result<()>> + Send;
 
     fn handle_continuously(
         &mut self,
-        mut receiver: Receiver<Msg<Self>>,
-        mut env: Ref<Self>,
-    ) -> impl Future<Output = Result<()>> + Send {
-        async move {
-            let cancellation_token = env.cancellation_token.clone();
+        receiver: Receiver<Self::Msg>,
+        env: Self::Ref,
+    ) -> impl Future<Output = Result<()>> + Send;
 
-            loop {
-                let maybe_msg = select! {
-                    m = receiver.recv() => m,
-                    () = cancellation_token.cancelled() => return Ok(()),
-                };
+    fn spawn(self) -> (JoinHandle<Result<()>>, Self::Ref);
 
-                let msg = match maybe_msg {
-                    Some(m) => m,
-                    None => return Ok(()),
-                };
+    fn spawn_with_channel(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+    ) -> (JoinHandle<Result<()>>, Self::Ref);
 
-                select! {
-                    maybe_ok = self.handle_call_or_cast(msg, &mut env) => maybe_ok,
-                    () = cancellation_token.cancelled() => return Ok(()),
-                }?;
-            }
+    fn spawn_with_token(
+        self,
+        cancellation_token: CancellationToken,
+    ) -> (JoinHandle<Result<()>>, Self::Ref);
+
+    fn spawn_with_channel_and_token(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+        cancellation_token: CancellationToken,
+    ) -> (JoinHandle<Result<()>>, Self::Ref);
+}
+
+impl<A: Actor> ActorExt for A {
+    type Ref = Ref<A>;
+    type Msg = Msg<A>;
+
+    async fn handle_call_or_cast(&mut self, msg: Self::Msg, env: &mut Self::Ref) -> Result<()> {
+        match msg {
+            Msg::Call(msg, reply_sender) => self.handle_call(msg, env, reply_sender).await,
+            Msg::Cast(msg) => self.handle_cast(msg, env).await,
         }
     }
 
-    fn spawn(self) -> (JoinHandle<Result<()>>, Ref<Self>) {
+    async fn handle_continuously(
+        &mut self,
+        mut receiver: Receiver<Self::Msg>,
+        mut env: Self::Ref,
+    ) -> Result<()> {
+        let cancellation_token = env.cancellation_token.clone();
+
+        loop {
+            let maybe_msg = select! {
+                m = receiver.recv() => m,
+                () = cancellation_token.cancelled() => return Ok(()),
+            };
+
+            let msg = match maybe_msg {
+                Some(m) => m,
+                None => return Ok(()),
+            };
+
+            select! {
+                maybe_ok = self.handle_call_or_cast(msg, &mut env) => maybe_ok,
+                () = cancellation_token.cancelled() => return Ok(()),
+            }?;
+        }
+    }
+
+    fn spawn(self) -> (JoinHandle<Result<()>>, Self::Ref) {
         let cancellation_token = CancellationToken::new();
         self.spawn_with_token(cancellation_token)
     }
 
     fn spawn_with_channel(
         self,
-        msg_sender: Sender<Msg<Self>>,
-        msg_receiver: Receiver<Msg<Self>>,
-    ) -> (JoinHandle<Result<()>>, Ref<Self>) {
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+    ) -> (JoinHandle<Result<()>>, Self::Ref) {
         let cancellation_token = CancellationToken::new();
         self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
     }
@@ -232,17 +269,17 @@ pub trait Actor: Sized + Send + 'static {
     fn spawn_with_token(
         self,
         cancellation_token: CancellationToken,
-    ) -> (JoinHandle<Result<()>>, Ref<Self>) {
+    ) -> (JoinHandle<Result<()>>, Self::Ref) {
         let (msg_sender, msg_receiver) = channel(8);
         self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
     }
 
     fn spawn_with_channel_and_token(
         mut self,
-        msg_sender: Sender<Msg<Self>>,
-        msg_receiver: Receiver<Msg<Self>>,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
         cancellation_token: CancellationToken,
-    ) -> (JoinHandle<Result<()>>, Ref<Self>) {
+    ) -> (JoinHandle<Result<()>>, Self::Ref) {
         let actor_ref = Ref {
             msg_sender,
             cancellation_token,

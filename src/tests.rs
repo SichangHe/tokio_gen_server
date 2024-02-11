@@ -5,7 +5,7 @@ use crate as tokio_gen_server;
 use anyhow::Result;
 use std::time::Duration;
 use tokio::{sync::oneshot, time::timeout};
-use tokio_gen_server::{Actor, Ref};
+use tokio_gen_server::*;
 
 #[derive(Debug, Default)]
 struct PingPongServer {
