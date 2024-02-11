@@ -105,6 +105,11 @@ pub enum Msg<A: Actor> {
 ///     type CallMsg = PingOrPong;
 ///     type Reply = PongOrCount;
 ///
+///     async fn init(&mut self, _env: &mut Ref<Self>) -> Result<()> {
+///         println!("PingPongServer starting.");
+///         Ok(())
+///     }
+///
 ///     async fn handle_cast(&mut self, _msg: Self::CastMsg, _env: &mut Ref<Self>) -> Result<()> {
 ///         self.counter += 1;
 ///         println!("Received ping #{}", self.counter);
@@ -127,28 +132,34 @@ pub enum Msg<A: Actor> {
 ///         }
 ///         Ok(())
 ///     }
+///
+///     async fn before_exit(&mut self, _env: &mut Ref<Self>) -> Result<()> {
+///         println!(
+///             "PingPongServer exiting with {} pings received.",
+///             self.counter
+///         );
+///         Ok(())
+///     }
 /// }
 ///
 /// const DECI_SECOND: Duration = Duration::from_millis(100);
 ///
 /// #[tokio::test]
-/// async fn ping_pong() {
+/// async fn ping_pong() -> Result<()> {
 ///     let ping_pong_server = PingPongServer::default();
 ///     let (handle, mut server_ref) = ping_pong_server.spawn();
 ///
-///     server_ref.cast(Ping).await.unwrap();
-///     let pong = server_ref.call(PingOrPong::Ping).await.unwrap();
+///     server_ref.cast(Ping).await?;
+///     let pong = server_ref.call(PingOrPong::Ping).await?;
 ///     assert_eq!(pong, PongOrCount::Pong);
 ///
-///     let count = server_ref.call(PingOrPong::Pong).await.unwrap();
+///     let count = server_ref.call(PingOrPong::Pong).await?;
 ///     assert_eq!(count, PongOrCount::Count(2));
 ///
 ///     server_ref.cancel();
-///     timeout(DECI_SECOND, handle)
-///         .await
-///         .unwrap()
-///         .unwrap()
-///         .unwrap()
+///     timeout(DECI_SECOND, handle).await???;
+///
+///     Ok(())
 /// }
 /// ```
 pub trait Actor: Sized + Send + 'static {
