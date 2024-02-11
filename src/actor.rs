@@ -176,6 +176,10 @@ pub trait Actor: Sized + Send + 'static {
     ) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
     }
+
+    fn before_exit(&mut self, _env: &mut Ref<Self>) -> impl Future<Output = Result<()>> + Send {
+        async { Ok(()) }
+    }
 }
 
 /// Provides convenience methods for [`Actor`].
@@ -191,8 +195,8 @@ pub trait ActorExt: Sized {
 
     fn handle_continuously(
         &mut self,
-        receiver: Receiver<Self::Msg>,
-        env: Self::Ref,
+        receiver: &mut Receiver<Self::Msg>,
+        env: &mut Self::Ref,
     ) -> impl Future<Output = Result<()>> + Send;
 
     fn spawn(self) -> (JoinHandle<Result<()>>, Self::Ref);
@@ -229,8 +233,8 @@ impl<A: Actor> ActorExt for A {
 
     async fn handle_continuously(
         &mut self,
-        mut receiver: Receiver<Self::Msg>,
-        mut env: Self::Ref,
+        receiver: &mut Receiver<Self::Msg>,
+        env: &mut Self::Ref,
     ) -> Result<()> {
         let cancellation_token = env.cancellation_token.clone();
 
@@ -246,7 +250,7 @@ impl<A: Actor> ActorExt for A {
             };
 
             select! {
-                maybe_ok = self.handle_call_or_cast(msg, &mut env) => maybe_ok,
+                maybe_ok = self.handle_call_or_cast(msg, env) => maybe_ok,
                 () = cancellation_token.cancelled() => return Ok(()),
             }?;
         }
@@ -277,7 +281,7 @@ impl<A: Actor> ActorExt for A {
     fn spawn_with_channel_and_token(
         mut self,
         msg_sender: Sender<Self::Msg>,
-        msg_receiver: Receiver<Self::Msg>,
+        mut msg_receiver: Receiver<Self::Msg>,
         cancellation_token: CancellationToken,
     ) -> (JoinHandle<Result<()>>, Self::Ref) {
         let actor_ref = Ref {
@@ -288,7 +292,9 @@ impl<A: Actor> ActorExt for A {
             let mut env = actor_ref.clone();
             spawn(async move {
                 self.init(&mut env).await?;
-                self.handle_continuously(msg_receiver, env).await
+                self.handle_continuously(&mut msg_receiver, &mut env)
+                    .await?;
+                self.before_exit(&mut env).await
             })
         };
 
