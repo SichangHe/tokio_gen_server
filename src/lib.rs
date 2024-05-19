@@ -14,6 +14,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 pub mod actor;
+pub mod bctor;
 
 pub mod prelude {
     pub use super::actor::{Actor, ActorExt, Msg, Ref};
