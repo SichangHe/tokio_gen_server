@@ -135,10 +135,41 @@ pub trait Actor: Send + 'static {
 
 pub type ActorHandle<Msg> = JoinHandle<(Receiver<Msg>, Result<()>)>;
 
-/// Provides convenience methods for [`Actor`].
-/// Only [`ActorExt::spawn`] and its derivatives are intended to
-/// be used directly.
+/// Provides convenience methods for spawning [`Actor`] instances.
 pub trait ActorExt {
+    type Ref;
+    type Msg;
+
+    /// Spawn the actor in a thread.
+    fn spawn(self) -> (ActorHandle<Self::Msg>, Self::Ref);
+
+    /// [`ActorExt::spawn_with_channel`] + [`ActorExt::spawn_with_token`].
+    fn spawn_with_channel_and_token(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+        cancellation_token: CancellationToken,
+    ) -> (ActorHandle<Self::Msg>, Self::Ref);
+
+    /// Same as [`ActorExt::spawn`] but with the given cancellation token.
+    /// Useful for leveraging [`CancellationToken`] inheritance.
+    fn spawn_with_token(
+        self,
+        cancellation_token: CancellationToken,
+    ) -> (ActorHandle<Self::Msg>, Self::Ref);
+
+    /// Same as [`ActorExt::spawn`] but with both ends of the channel given.
+    /// Useful for relaying messages or reusing channels.
+    fn spawn_with_channel(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+    ) -> (ActorHandle<Self::Msg>, Self::Ref);
+}
+
+/// Provides convenience methods for running [`Actor`] instances.
+/// Not intended for users.
+pub trait ActorRunExt {
     type Ref;
     type Msg;
 
@@ -154,32 +185,6 @@ pub trait ActorExt {
         env: &mut Self::Ref,
     ) -> impl Future<Output = Result<()>> + Send;
 
-    /// Spawn the actor in a thread.
-    fn spawn(self) -> (ActorHandle<Self::Msg>, Self::Ref);
-
-    /// Same as [`ActorExt::spawn`] but with both ends of the channel given.
-    /// Useful for relaying messages or reusing channels.
-    fn spawn_with_channel(
-        self,
-        msg_sender: Sender<Self::Msg>,
-        msg_receiver: Receiver<Self::Msg>,
-    ) -> (ActorHandle<Self::Msg>, Self::Ref);
-
-    /// Same as [`ActorExt::spawn`] but with the given cancellation token.
-    /// Useful for leveraging [`CancellationToken`] inheritance.
-    fn spawn_with_token(
-        self,
-        cancellation_token: CancellationToken,
-    ) -> (ActorHandle<Self::Msg>, Self::Ref);
-
-    /// [`ActorExt::spawn_with_channel`] + [`ActorExt::spawn_with_token`].
-    fn spawn_with_channel_and_token(
-        self,
-        msg_sender: Sender<Self::Msg>,
-        msg_receiver: Receiver<Self::Msg>,
-        cancellation_token: CancellationToken,
-    ) -> (ActorHandle<Self::Msg>, Self::Ref);
-
     fn run_and_handle_exit(
         self,
         env: Self::Ref,
@@ -193,7 +198,7 @@ pub trait ActorExt {
     ) -> impl Future<Output = Result<()>> + Send;
 }
 
-impl<A: Actor> ActorExt for A {
+impl<A: Actor> ActorRunExt for A {
     type Ref = Ref<A>;
     type Msg = Msg<A>;
 
@@ -229,45 +234,6 @@ impl<A: Actor> ActorExt for A {
         }
     }
 
-    fn spawn(self) -> (ActorHandle<Self::Msg>, Self::Ref) {
-        let cancellation_token = CancellationToken::new();
-        self.spawn_with_token(cancellation_token)
-    }
-
-    fn spawn_with_channel(
-        self,
-        msg_sender: Sender<Self::Msg>,
-        msg_receiver: Receiver<Self::Msg>,
-    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
-        let cancellation_token = CancellationToken::new();
-        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
-    }
-
-    fn spawn_with_token(
-        self,
-        cancellation_token: CancellationToken,
-    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
-        let (msg_sender, msg_receiver) = channel(8);
-        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
-    }
-
-    fn spawn_with_channel_and_token(
-        self,
-        msg_sender: Sender<Self::Msg>,
-        msg_receiver: Receiver<Self::Msg>,
-        cancellation_token: CancellationToken,
-    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
-        let actor_ref = Ref {
-            msg_sender,
-            cancellation_token,
-        };
-        let handle = {
-            let env = actor_ref.clone();
-            spawn(self.run_and_handle_exit(env, msg_receiver))
-        };
-        (handle, actor_ref)
-    }
-
     async fn run_and_handle_exit(
         mut self,
         mut env: Self::Ref,
@@ -287,6 +253,50 @@ impl<A: Actor> ActorExt for A {
     ) -> Result<()> {
         self.init(env).await?;
         self.handle_continuously(msg_receiver, env).await
+    }
+}
+
+impl<A: Actor> ActorExt for A {
+    type Ref = Ref<A>;
+    type Msg = Msg<A>;
+
+    fn spawn(self) -> (ActorHandle<Self::Msg>, Self::Ref) {
+        let cancellation_token = CancellationToken::new();
+        self.spawn_with_token(cancellation_token)
+    }
+
+    fn spawn_with_channel_and_token(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+        cancellation_token: CancellationToken,
+    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
+        let actor_ref = Ref {
+            msg_sender,
+            cancellation_token,
+        };
+        let handle = {
+            let env = actor_ref.clone();
+            spawn(self.run_and_handle_exit(env, msg_receiver))
+        };
+        (handle, actor_ref)
+    }
+
+    fn spawn_with_token(
+        self,
+        cancellation_token: CancellationToken,
+    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
+        let (msg_sender, msg_receiver) = channel(8);
+        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
+    }
+
+    fn spawn_with_channel(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
+        let cancellation_token = CancellationToken::new();
+        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
     }
 }
 

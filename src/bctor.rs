@@ -133,20 +133,10 @@ pub trait Bctor: Send + 'static {
 
 pub type BctorHandle<Msg> = JoinHandle<(Receiver<Msg>, Result<()>)>;
 
-/// Provides convenience methods for [`Bctor`].
-/// Only [`BctorExt::spawn`] and its derivatives are intended to
-/// be used directly.
+/// Provides convenience methods for spawning [`Bctor`] instances.
 pub trait BctorExt {
     type Ref;
     type Msg;
-
-    fn handle_call_or_cast(&mut self, msg: Self::Msg, env: &mut Self::Ref) -> Result<()>;
-
-    fn handle_continuously(
-        &mut self,
-        receiver: &mut Receiver<Self::Msg>,
-        env: &mut Self::Ref,
-    ) -> Result<()>;
 
     /// Spawn the bctor in a thread.
     fn spawn(self) -> (BctorHandle<Self::Msg>, Self::Ref);
@@ -158,6 +148,21 @@ pub trait BctorExt {
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
     ) -> (BctorHandle<Self::Msg>, Self::Ref);
+}
+
+/// Provides convenience methods for running [`Bctor`] instances.
+/// Not intended for users.
+pub trait BctorRunExt {
+    type Ref;
+    type Msg;
+
+    fn handle_call_or_cast(&mut self, msg: Self::Msg, env: &mut Self::Ref) -> Result<()>;
+
+    fn handle_continuously(
+        &mut self,
+        receiver: &mut Receiver<Self::Msg>,
+        env: &mut Self::Ref,
+    ) -> Result<()>;
 
     fn run_and_handle_exit(
         self,
@@ -172,7 +177,7 @@ pub trait BctorExt {
     ) -> Result<()>;
 }
 
-impl<A: Bctor> BctorExt for A {
+impl<A: Bctor> BctorRunExt for A {
     type Ref = Ref<A>;
     type Msg = Msg<A>;
 
@@ -206,24 +211,6 @@ impl<A: Bctor> BctorExt for A {
         }
     }
 
-    fn spawn(self) -> (BctorHandle<Self::Msg>, Self::Ref) {
-        let (msg_sender, msg_receiver) = channel(8);
-        self.spawn_with_channel(msg_sender, msg_receiver)
-    }
-
-    fn spawn_with_channel(
-        self,
-        msg_sender: Sender<Self::Msg>,
-        msg_receiver: Receiver<Self::Msg>,
-    ) -> (BctorHandle<Self::Msg>, Self::Ref) {
-        let bctor_ref = Ref { msg_sender };
-        let handle = {
-            let env = bctor_ref.clone();
-            spawn(|| self.run_and_handle_exit(env, msg_receiver))
-        };
-        (handle, bctor_ref)
-    }
-
     fn run_and_handle_exit(
         mut self,
         mut env: Self::Ref,
@@ -241,6 +228,29 @@ impl<A: Bctor> BctorExt for A {
     ) -> Result<()> {
         self.init(env)?;
         self.handle_continuously(msg_receiver, env)
+    }
+}
+
+impl<A: Bctor> BctorExt for A {
+    type Ref = Ref<A>;
+    type Msg = Msg<A>;
+
+    fn spawn(self) -> (BctorHandle<Self::Msg>, Self::Ref) {
+        let (msg_sender, msg_receiver) = channel(8);
+        self.spawn_with_channel(msg_sender, msg_receiver)
+    }
+
+    fn spawn_with_channel(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+    ) -> (BctorHandle<Self::Msg>, Self::Ref) {
+        let bctor_ref = Ref { msg_sender };
+        let handle = {
+            let env = bctor_ref.clone();
+            spawn(|| self.run_and_handle_exit(env, msg_receiver))
+        };
+        (handle, bctor_ref)
     }
 }
 
