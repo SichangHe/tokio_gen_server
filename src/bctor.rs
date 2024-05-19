@@ -134,7 +134,8 @@ pub trait Bctor: Sized + Send + 'static {
 pub type BctorHandle<Msg> = JoinHandle<(Receiver<Msg>, Result<()>)>;
 
 /// Provides convenience methods for [`Bctor`].
-/// Only [`BctorExt::spawn`] is intended to be used directly.
+/// Only [`BctorExt::spawn`] and its derivatives are intended to
+/// be used directly.
 pub trait BctorExt: Sized {
     type Ref;
     type Msg;
@@ -150,6 +151,8 @@ pub trait BctorExt: Sized {
     /// Spawn the bctor in a thread.
     fn spawn(self) -> (BctorHandle<Self::Msg>, Self::Ref);
 
+    /// Same as [`BctorExt::spawn`] but with both ends of the channel given.
+    /// Useful for relaying messages or reusing channels.
     fn spawn_with_channel(
         self,
         msg_sender: Sender<Self::Msg>,

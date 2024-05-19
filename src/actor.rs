@@ -136,7 +136,8 @@ pub trait Actor: Sized + Send + 'static {
 pub type ActorHandle<Msg> = JoinHandle<(Receiver<Msg>, Result<()>)>;
 
 /// Provides convenience methods for [`Actor`].
-/// Only [`ActorExt::spawn`] is intended to be used directly.
+/// Only [`ActorExt::spawn`] and its derivatives are intended to
+/// be used directly.
 pub trait ActorExt: Sized {
     type Ref;
     type Msg;
@@ -156,17 +157,22 @@ pub trait ActorExt: Sized {
     /// Spawn the actor in a thread.
     fn spawn(self) -> (ActorHandle<Self::Msg>, Self::Ref);
 
+    /// Same as [`ActorExt::spawn`] but with both ends of the channel given.
+    /// Useful for relaying messages or reusing channels.
     fn spawn_with_channel(
         self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
     ) -> (ActorHandle<Self::Msg>, Self::Ref);
 
+    /// Same as [`ActorExt::spawn`] but with the given cancellation token.
+    /// Useful for leveraging [`CancellationToken`] inheritance.
     fn spawn_with_token(
         self,
         cancellation_token: CancellationToken,
     ) -> (ActorHandle<Self::Msg>, Self::Ref);
 
+    /// [`ActorExt::spawn_with_channel`] + [`ActorExt::spawn_with_token`].
     fn spawn_with_channel_and_token(
         self,
         msg_sender: Sender<Self::Msg>,

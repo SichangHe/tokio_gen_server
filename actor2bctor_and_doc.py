@@ -79,7 +79,7 @@ def substitute_for_sync(text: str) -> str:
         "handle.join().unwrap()",
         text,
     )
-    text = re.sub(r"\n.*fn .*token.*(?:\n.*[)\S])*\n", "", text)
+    text = re.sub(r"\n(:?\s*///.*\n)*.*fn .*token.*(?:\n.*[)\S])*\n", "\n", text)
     text = re.sub(r"\n.*cancellation.*\n", "\n", text)
 
     # Wildcard replacements.
