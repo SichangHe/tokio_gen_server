@@ -3,6 +3,8 @@ import os
 from typing import Final
 import re
 
+NOTICE = "DO NOT modify manually! Generate with `actor2bctor_and_doc.py`."
+
 
 def substitute_for_sync(text: str) -> str:
     # Exact replacements.
@@ -103,10 +105,14 @@ def transform_file(input_filename: str, output_filename: str, header: str = ""):
 
 ACTOR_SRC_NAME: Final = "src/actor.rs"
 BCTOR_SRC_NAME: Final = "src/bctor.rs"
-MOD_DOC: Final = """
+BCTOR_HEADER: Final = f"// {NOTICE}"
+MOD_DOC: Final = (
+    BCTOR_HEADER
+    + """
 //! Blocking actor. Mirrors functionalities in `actor` but blocking.
 use std::thread::{spawn, JoinHandle};
 """
+)
 
 ACTOR_TEST_NAME: Final = "src/actor/tests.rs"
 BCTOR_TEST_NAME: Final = "src/bctor/tests.rs"
@@ -114,7 +120,7 @@ BCTOR_TEST_NAME: Final = "src/bctor/tests.rs"
 
 def actor2bctor() -> None:
     transform_file(ACTOR_SRC_NAME, BCTOR_SRC_NAME, MOD_DOC)
-    transform_file(ACTOR_TEST_NAME, BCTOR_TEST_NAME)
+    transform_file(ACTOR_TEST_NAME, BCTOR_TEST_NAME, BCTOR_HEADER + "\n")
     os.system(
         "cargo clippy --all-targets --fix --allow-dirty --allow-staged --workspace"
     )
@@ -135,16 +141,17 @@ def concate_and_paste(
         f.write(header + input_trimmed + footer)
 
 
+DOC_HEADER: Final = f"<!-- {NOTICE} -->"
 ACTOR_DOC_NAME: Final = "src/actor_doc.md"
-ACTOR_DOC_HEADER: Final = """
+ACTOR_DOC_HEADER: Final = f"""{DOC_HEADER}
 # An Elixir/Erlang-GenServer-like actor
 
 ## Example
 
 ```rust
-""".lstrip()
+"""
 BCTOR_DOC_NAME: Final = "src/bctor_doc.md"
-BCTOR_DOC_HEADER: Final = """
+BCTOR_DOC_HEADER: Final = f"""{DOC_HEADER}
 # An Elixir/Erlang-GenServer-like Blocking aCTOR
 
 `bctor` mirrors the functionality of `actor`, but blocking.
@@ -153,7 +160,7 @@ Tokio channels are used for compatibility.
 ## Example
 
 ```rust
-""".lstrip()
+"""
 FOOTER: Final = """
 ```
 """.lstrip()
@@ -161,7 +168,7 @@ FOOTER: Final = """
 
 def gen_docs() -> None:
     concate_and_paste(ACTOR_TEST_NAME, ACTOR_DOC_NAME, 4, ACTOR_DOC_HEADER, FOOTER)
-    concate_and_paste(BCTOR_TEST_NAME, BCTOR_DOC_NAME, 4, BCTOR_DOC_HEADER, FOOTER)
+    concate_and_paste(BCTOR_TEST_NAME, BCTOR_DOC_NAME, 5, BCTOR_DOC_HEADER, FOOTER)
 
 
 def main() -> None:

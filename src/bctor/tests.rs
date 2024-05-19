@@ -1,7 +1,8 @@
+// DO NOT modify manually! Generate with `actor2bctor_and_doc.py`.
 //! Tests are synchronized to the docstring.
 use crate as tokio_gen_server;
 
-// INSTRUCTION: When changed, run `gen_docs.py` to update `bctor_doc.md`.
+// INSTRUCTION: When changed, run `bctor2bctor_and_doc.py`.
 use anyhow::{bail, Result};
 
 use tokio::sync::{mpsc::Receiver, oneshot};

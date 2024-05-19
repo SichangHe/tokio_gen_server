@@ -1,7 +1,7 @@
 //! Tests are synchronized to the docstring.
 use crate as tokio_gen_server;
 
-// INSTRUCTION: When changed, run `gen_docs.py` to update `actor_doc.md`.
+// INSTRUCTION: When changed, run `actor2bctor_and_doc.py`.
 use anyhow::{bail, Result};
 use std::time::Duration;
 use tokio::{

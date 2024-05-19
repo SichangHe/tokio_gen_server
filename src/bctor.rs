@@ -1,3 +1,4 @@
+// DO NOT modify manually! Generate with `actor2bctor_and_doc.py`.
 //! Blocking actor. Mirrors functionalities in `actor` but blocking.
 use super::*;
 use std::thread::{spawn, JoinHandle};

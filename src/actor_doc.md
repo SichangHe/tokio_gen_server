@@ -1,3 +1,4 @@
+<!-- DO NOT modify manually! Generate with `actor2bctor_and_doc.py`. -->
 # An Elixir/Erlang-GenServer-like actor
 
 ## Example
