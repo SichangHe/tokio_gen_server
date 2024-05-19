@@ -10,6 +10,9 @@ def substitute_for_sync(text: str) -> str:
     # Exact replacements.
     text = (
         text.replace(
+            "use super::*", "use std::thread::{spawn, JoinHandle}; use super::*"
+        )
+        .replace(
             """select! {
                 m = receiver.recv() => m,
                 () = cancellation_token.cancelled() => return Ok(()),
@@ -110,7 +113,7 @@ MOD_DOC: Final = (
     BCTOR_HEADER
     + """
 //! Blocking actor. Mirrors functionalities in `actor` but blocking.
-use std::thread::{spawn, JoinHandle};
+//!
 """
 )
 
@@ -146,6 +149,9 @@ ACTOR_DOC_NAME: Final = "src/actor_doc.md"
 ACTOR_DOC_HEADER: Final = f"""{DOC_HEADER}
 # An Elixir/Erlang-GenServer-like actor
 
+Define 3 message types and at least one callback handler on your struct to
+make it an actor.
+
 ## Example
 
 ```rust
@@ -154,7 +160,7 @@ BCTOR_DOC_NAME: Final = "src/bctor_doc.md"
 BCTOR_DOC_HEADER: Final = f"""{DOC_HEADER}
 # An Elixir/Erlang-GenServer-like Blocking aCTOR
 
-`bctor` mirrors the functionality of `actor`, but blocking.
+`bctor` mirrors the functionality of [`actor`], but blocking.
 Tokio channels are used for compatibility.
 
 ## Example

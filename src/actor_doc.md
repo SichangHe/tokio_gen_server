@@ -1,6 +1,9 @@
 <!-- DO NOT modify manually! Generate with `actor2bctor_and_doc.py`. -->
 # An Elixir/Erlang-GenServer-like actor
 
+Define 3 message types and at least one callback handler on your struct to
+make it an actor.
+
 ## Example
 
 ```rust
@@ -12,40 +15,31 @@ use tokio::{
 };
 use tokio_gen_server::prelude::*;
 
+// Define the actor.
 #[derive(Debug, Default)]
 struct PingPongServer {
     counter: usize,
 }
-
-#[derive(Debug)]
-enum PingOrBang {
-    Ping,
-    Bang,
-}
-
-#[derive(Debug)]
-enum PingOrPong {
-    Ping,
-    Pong,
-}
-
-#[derive(Debug, Eq, PartialEq)]
-enum PongOrCount {
-    Pong,
-    Count(usize),
-}
-
 impl Actor for PingPongServer {
+    // Message types.
     type CastMsg = PingOrBang;
     type CallMsg = PingOrPong;
     type Reply = PongOrCount;
 
+    // All the methods are optional. The default implementations does nothing.
+
+    // `init` is called when the actor starts.
     async fn init(&mut self, _env: &mut ActorRef<Self>) -> Result<()> {
         println!("PingPongServer starting.");
         Ok(())
     }
 
+    // `handle_cast` is called when the actor receives a message and
+    // does not need to reply.
     async fn handle_cast(&mut self, msg: Self::CastMsg, _env: &mut ActorRef<Self>) -> Result<()> {
+        println!(
+            "`handle_cast` is called when the actor receives a message and does not need to reply."
+        );
         if matches!(msg, PingOrBang::Bang) {
             bail!("Received Bang! Blowing up.");
         }
@@ -54,6 +48,8 @@ impl Actor for PingPongServer {
         Ok(())
     }
 
+    // `handle_call` is called when the actor receives a message and
+    // needs to reply.
     async fn handle_call(
         &mut self,
         msg: Self::CallMsg,
@@ -71,6 +67,7 @@ impl Actor for PingPongServer {
         Ok(())
     }
 
+    // `before_exit` is called before the actor exits.
     async fn before_exit(
         &mut self,
         run_result: Result<()>,
@@ -96,44 +93,76 @@ impl Actor for PingPongServer {
     }
 }
 
-const DECI_SECOND: Duration = Duration::from_millis(100);
-
+// Now let's look at an example where we use the actor normally.
 #[tokio::test]
 async fn ping_pong() -> Result<()> {
+    // Call `spawn` on the actor to start it.
     let ping_pong_server = PingPongServer::default();
     let (handle, mut server_ref) = ping_pong_server.spawn();
 
+    // Cast a message to the actor and do not expect a reply.
     server_ref.cast(PingOrBang::Ping).await?;
+
+    // Call the actor and wait for the reply.
     let pong = server_ref.call(PingOrPong::Ping).await?;
     assert_eq!(pong, PongOrCount::Pong);
-
     let count = server_ref.call(PingOrPong::Pong).await?;
     assert_eq!(count, PongOrCount::Count(2));
 
+    // Cancel the actor.
     server_ref.cancel();
-    timeout(DECI_SECOND, handle).await??.1?;
+
+    // The handle returns both the receiver end of the channel and
+    // the run result.
+    let (_msg_receiver, Ok(())) = timeout(DECI_SECOND, handle).await?? else {
+        panic!("Should exit normally.")
+    };
 
     Ok(())
 }
 
+// Let's also see how the actor crashes.
 #[tokio::test]
 async fn ping_pong_bang() -> Result<()> {
     let ping_pong_server = PingPongServer::default();
     let (handle, mut server_ref) = ping_pong_server.spawn();
 
+    // Cast the `Bang` message to crash the actor.
     server_ref.cast(PingOrBang::Bang).await?;
+
+    // Call the actor and expect the call to fail.
     match timeout(DECI_SECOND, server_ref.call(PingOrPong::Ping)).await {
         Ok(Err(_)) | Err(_) => {}
         Ok(reply) => panic!("Ping Ping Server should have crashed, but got `{reply:?}`."),
     }
 
-    let err: String = timeout(DECI_SECOND, handle)
-        .await??
-        .1
-        .unwrap_err()
-        .downcast()?;
+    // The receiver end of the channel can be reused after the crash.
+    let (_msg_receiver, Err(why)) = timeout(DECI_SECOND, handle).await?? else {
+        panic!("Should exit with error.")
+    };
+
+    // The run result tells why it crashed.
+    let err: String = why.downcast()?;
     assert_eq!(err, "with error `Received Bang! Blowing up.` and disregarded messages `[Call(Ping, Sender { inner: Some(Inner { state: State { is_complete: false, is_closed: false, is_rx_task_set: true, is_tx_task_set: false } }) })]`, ");
 
     Ok(())
 }
+
+// Data structure definitions.
+#[derive(Debug)]
+enum PingOrBang {
+    Ping,
+    Bang,
+}
+#[derive(Debug)]
+enum PingOrPong {
+    Ping,
+    Pong,
+}
+#[derive(Debug, Eq, PartialEq)]
+enum PongOrCount {
+    Pong,
+    Count(usize),
+}
+const DECI_SECOND: Duration = Duration::from_millis(100);
 ```

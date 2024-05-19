@@ -1,21 +1,37 @@
 // DO NOT modify manually! Generate with `actor2bctor_and_doc.py`.
 //! Blocking actor. Mirrors functionalities in `actor` but blocking.
+//!
+//! Please see the documentation for [`Bctor`].
 use super::*;
 use std::thread::{spawn, JoinHandle};
 
 // TODO: Error type.
-// TODO: Documentation.
 
+/// A reference to an instance of [`Bctor`],
+/// to cast or call messages on it or cancel it.
 #[derive(Debug)]
 pub struct Ref<A: Bctor> {
     pub msg_sender: Sender<Msg<A>>,
 }
 
 impl<A: Bctor> Ref<A> {
+    /// Cast a message to the bctor and do not expect a reply.
     pub fn cast(&mut self, msg: A::CastMsg) -> Result<(), SendError<Msg<A>>> {
         self.msg_sender.blocking_send(Msg::Cast(msg))
     }
 
+    /// Same as [`Ref::cast`] but blocking.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if called within an asynchronous execution context.
+    pub fn blocking_cast(&mut self, msg: A::CastMsg) -> Result<(), SendError<Msg<A>>> {
+        self.msg_sender.blocking_send(Msg::Cast(msg))
+    }
+
+    /// Call the bctor and wait for a reply.
+    ///
+    /// To time out the call, use [`tokio::time::timeout`].
     pub fn call(&mut self, msg: A::CallMsg) -> Result<A::Reply> {
         // NB: Using the `oneshot` channel here is inexpensive because its only
         // overhead is 1 `Arc` and 5 extra words of allocation.
@@ -28,6 +44,23 @@ impl<A: Bctor> Ref<A> {
             .context("Failed to receive bctor's reply")
     }
 
+    /// Same as [`Ref::call`] but blocking.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if called within an asynchronous execution context.
+    pub fn blocking_call(&mut self, msg: A::CallMsg) -> Result<A::Reply> {
+        let (reply_sender, reply_receiver) = oneshot::channel();
+        self.msg_sender
+            .blocking_send(Msg::Call(msg, reply_sender))
+            .context("Failed to send call to bctor")?;
+        reply_receiver
+            .blocking_recv()
+            .context("Failed to receive bctor's reply")
+    }
+
+    /// Call the bctor and let it reply via a given channel sender.
+    /// Useful for relaying a call from some other caller.
     pub fn relay_call(
         &mut self,
         msg: A::CallMsg,
@@ -36,7 +69,7 @@ impl<A: Bctor> Ref<A> {
         self.msg_sender.blocking_send(Msg::Call(msg, reply_sender))
     }
 
-    /// Cancel the bctor referred to.
+    /// Cancel the bctor referred to, so it exits.
     pub fn cancel(&mut self) {
         _ = self.msg_sender.blocking_send(Msg::Exit)
     }
@@ -50,6 +83,7 @@ impl<A: Bctor> Clone for Ref<A> {
     }
 }
 
+/// A message sent to an bctor.
 #[derive(Debug)]
 pub enum Msg<A: Bctor> {
     Exit,
@@ -63,14 +97,20 @@ pub trait Bctor: Sized + Send + 'static {
     type CastMsg: Send + Sync;
     type Reply: Send;
 
+    /// Called when the bctor starts.
     fn init(&mut self, _env: &mut Ref<Self>) -> Result<()> {
         Ok(())
     }
 
+    /// Called when the bctor receives a message and does not need to reply.
     fn handle_cast(&mut self, _msg: Self::CastMsg, _env: &mut Ref<Self>) -> Result<()> {
         Ok(())
     }
 
+    /// Called when the bctor receives a message and needs to reply.
+    ///
+    /// Implementations should send the reply using the `reply_sender`,
+    /// otherwise the caller may hang.
     fn handle_call(
         &mut self,
         _msg: Self::CallMsg,
@@ -80,6 +120,7 @@ pub trait Bctor: Sized + Send + 'static {
         Ok(())
     }
 
+    /// Called before the bctor exits.
     fn before_exit(
         &mut self,
         _run_result: Result<()>,
@@ -93,6 +134,7 @@ pub trait Bctor: Sized + Send + 'static {
 pub type BctorHandle<Msg> = JoinHandle<(Receiver<Msg>, Result<()>)>;
 
 /// Provides convenience methods for [`Bctor`].
+/// Only [`BctorExt::spawn`] is intended to be used directly.
 pub trait BctorExt: Sized {
     type Ref;
     type Msg;
@@ -105,6 +147,7 @@ pub trait BctorExt: Sized {
         env: &mut Self::Ref,
     ) -> Result<()>;
 
+    /// Spawn the bctor in a thread.
     fn spawn(self) -> (BctorHandle<Self::Msg>, Self::Ref);
 
     fn spawn_with_channel(

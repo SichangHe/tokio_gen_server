@@ -1,8 +1,10 @@
+//! Please see the documentation for [`Actor`].
 use super::*;
 
 // TODO: Error type.
-// TODO: Documentation.
 
+/// A reference to an instance of [`Actor`],
+/// to cast or call messages on it or cancel it.
 #[derive(Debug)]
 pub struct Ref<A: Actor> {
     pub msg_sender: Sender<Msg<A>>,
@@ -10,14 +12,23 @@ pub struct Ref<A: Actor> {
 }
 
 impl<A: Actor> Ref<A> {
+    /// Cast a message to the actor and do not expect a reply.
     pub async fn cast(&mut self, msg: A::CastMsg) -> Result<(), SendError<Msg<A>>> {
         self.msg_sender.send(Msg::Cast(msg)).await
     }
 
+    /// Same as [`Ref::cast`] but blocking.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if called within an asynchronous execution context.
     pub fn blocking_cast(&mut self, msg: A::CastMsg) -> Result<(), SendError<Msg<A>>> {
         self.msg_sender.blocking_send(Msg::Cast(msg))
     }
 
+    /// Call the actor and wait for a reply.
+    ///
+    /// To time out the call, use [`tokio::time::timeout`].
     pub async fn call(&mut self, msg: A::CallMsg) -> Result<A::Reply> {
         // NB: Using the `oneshot` channel here is inexpensive because its only
         // overhead is 1 `Arc` and 5 extra words of allocation.
@@ -31,6 +42,11 @@ impl<A: Actor> Ref<A> {
             .context("Failed to receive actor's reply")
     }
 
+    /// Same as [`Ref::call`] but blocking.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if called within an asynchronous execution context.
     pub fn blocking_call(&mut self, msg: A::CallMsg) -> Result<A::Reply> {
         let (reply_sender, reply_receiver) = oneshot::channel();
         self.msg_sender
@@ -41,6 +57,8 @@ impl<A: Actor> Ref<A> {
             .context("Failed to receive actor's reply")
     }
 
+    /// Call the actor and let it reply via a given channel sender.
+    /// Useful for relaying a call from some other caller.
     pub async fn relay_call(
         &mut self,
         msg: A::CallMsg,
@@ -49,7 +67,7 @@ impl<A: Actor> Ref<A> {
         self.msg_sender.send(Msg::Call(msg, reply_sender)).await
     }
 
-    /// Cancel the actor referred to.
+    /// Cancel the actor referred to, so it exits.
     pub fn cancel(&mut self) {
         self.cancellation_token.cancel()
     }
@@ -64,6 +82,7 @@ impl<A: Actor> Clone for Ref<A> {
     }
 }
 
+/// A message sent to an actor.
 #[derive(Debug)]
 pub enum Msg<A: Actor> {
     Call(A::CallMsg, oneshot::Sender<A::Reply>),
@@ -76,10 +95,12 @@ pub trait Actor: Sized + Send + 'static {
     type CastMsg: Send + Sync;
     type Reply: Send;
 
+    /// Called when the actor starts.
     fn init(&mut self, _env: &mut Ref<Self>) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
     }
 
+    /// Called when the actor receives a message and does not need to reply.
     fn handle_cast(
         &mut self,
         _msg: Self::CastMsg,
@@ -88,6 +109,10 @@ pub trait Actor: Sized + Send + 'static {
         async { Ok(()) }
     }
 
+    /// Called when the actor receives a message and needs to reply.
+    ///
+    /// Implementations should send the reply using the `reply_sender`,
+    /// otherwise the caller may hang.
     fn handle_call(
         &mut self,
         _msg: Self::CallMsg,
@@ -97,6 +122,7 @@ pub trait Actor: Sized + Send + 'static {
         async { Ok(()) }
     }
 
+    /// Called before the actor exits.
     fn before_exit(
         &mut self,
         _run_result: Result<()>,
@@ -110,6 +136,7 @@ pub trait Actor: Sized + Send + 'static {
 pub type ActorHandle<Msg> = JoinHandle<(Receiver<Msg>, Result<()>)>;
 
 /// Provides convenience methods for [`Actor`].
+/// Only [`ActorExt::spawn`] is intended to be used directly.
 pub trait ActorExt: Sized {
     type Ref;
     type Msg;
@@ -126,6 +153,7 @@ pub trait ActorExt: Sized {
         env: &mut Self::Ref,
     ) -> impl Future<Output = Result<()>> + Send;
 
+    /// Spawn the actor in a thread.
     fn spawn(self) -> (ActorHandle<Self::Msg>, Self::Ref);
 
     fn spawn_with_channel(
