@@ -112,13 +112,61 @@ ACTOR_TEST_NAME: Final = "src/actor/tests.rs"
 BCTOR_TEST_NAME: Final = "src/bctor/tests.rs"
 
 
-def main():
+def actor2bctor() -> None:
     transform_file(ACTOR_SRC_NAME, BCTOR_SRC_NAME, MOD_DOC)
     transform_file(ACTOR_TEST_NAME, BCTOR_TEST_NAME)
     os.system(
         "cargo clippy --all-targets --fix --allow-dirty --allow-staged --workspace"
     )
     os.system("cargo fmt")
+
+
+def concate_and_paste(
+    input_filename: str,
+    output_filename: str,
+    n_cutoff_line: int = 0,
+    header: str = "",
+    footer: str = "",
+):
+    with open(input_filename) as f:
+        input_lines = f.readlines()
+    input_trimmed = "".join(input_lines[n_cutoff_line:])
+    with open(output_filename, "w") as f:
+        f.write(header + input_trimmed + footer)
+
+
+ACTOR_DOC_NAME: Final = "src/actor_doc.md"
+ACTOR_DOC_HEADER: Final = """
+# An Elixir/Erlang-GenServer-like actor
+
+## Example
+
+```rust
+""".lstrip()
+BCTOR_DOC_NAME: Final = "src/bctor_doc.md"
+BCTOR_DOC_HEADER: Final = """
+# An Elixir/Erlang-GenServer-like Blocking aCTOR
+
+`bctor` mirrors the functionality of `actor`, but blocking.
+Tokio channels are used for compatibility.
+
+## Example
+
+```rust
+""".lstrip()
+FOOTER: Final = """
+```
+""".lstrip()
+
+
+def gen_docs() -> None:
+    concate_and_paste(ACTOR_TEST_NAME, ACTOR_DOC_NAME, 4, ACTOR_DOC_HEADER, FOOTER)
+    concate_and_paste(BCTOR_TEST_NAME, BCTOR_DOC_NAME, 4, BCTOR_DOC_HEADER, FOOTER)
+
+
+def main() -> None:
+    actor2bctor()
+    gen_docs()
 
 
 main() if __name__ == "__main__" else None
