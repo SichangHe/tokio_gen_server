@@ -7,11 +7,8 @@ Tokio channels are used for compatibility.
 
 ```rust
 use anyhow::{bail, Result};
-use std::time::Duration;
-use tokio::{
-    sync::{mpsc::Receiver, oneshot},
-    time::timeout,
-};
+
+use tokio::sync::{mpsc::Receiver, oneshot};
 use tokio_gen_server::prelude::*;
 
 #[derive(Debug, Default)]
@@ -98,8 +95,6 @@ impl Bctor for PingPongServer {
     }
 }
 
-const DECI_SECOND: Duration = Duration::from_millis(100);
-
 #[test]
 fn ping_pong() -> Result<()> {
     let ping_pong_server = PingPongServer::default();
@@ -113,6 +108,7 @@ fn ping_pong() -> Result<()> {
     assert_eq!(count, PongOrCount::Count(2));
 
     server_ref.cancel();
+    server_ref.cast(PingOrBang::Ping)?;
     handle.join().unwrap().1?;
 
     Ok(())
