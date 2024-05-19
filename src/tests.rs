@@ -1,8 +1,9 @@
 //! Tests are synchronized to the docstring.
 use crate as tokio_gen_server;
 
+// TODO: Do this:
 // INSTRUCTION: Copy below code to docstring every time we change it.
-use anyhow::Result;
+use anyhow::{bail, Result};
 use std::time::Duration;
 use tokio::{sync::oneshot, time::timeout};
 use tokio_gen_server::*;
@@ -12,8 +13,13 @@ struct PingPongServer {
     counter: usize,
 }
 
-struct Ping;
+#[derive(Debug)]
+enum PingOrBang {
+    Ping,
+    Bang,
+}
 
+#[derive(Debug)]
 enum PingOrPong {
     Ping,
     Pong,
@@ -26,7 +32,7 @@ enum PongOrCount {
 }
 
 impl Actor for PingPongServer {
-    type CastMsg = Ping;
+    type CastMsg = PingOrBang;
     type CallMsg = PingOrPong;
     type Reply = PongOrCount;
 
@@ -35,7 +41,10 @@ impl Actor for PingPongServer {
         Ok(())
     }
 
-    async fn handle_cast(&mut self, _msg: Self::CastMsg, _env: &mut Ref<Self>) -> Result<()> {
+    async fn handle_cast(&mut self, msg: Self::CastMsg, _env: &mut Ref<Self>) -> Result<()> {
+        if matches!(msg, PingOrBang::Bang) {
+            bail!("Received Bang! Blowing up.");
+        }
         self.counter += 1;
         println!("Received ping #{}", self.counter);
         Ok(())
@@ -58,12 +67,27 @@ impl Actor for PingPongServer {
         Ok(())
     }
 
-    async fn before_exit(&mut self, _env: &mut Ref<Self>) -> Result<()> {
+    async fn before_exit(
+        &mut self,
+        run_result: Result<()>,
+        _env: &mut Ref<Self>,
+        msg_receiver: &mut Receiver<Msg<Self>>,
+    ) -> Result<()> {
+        let result_msg = match &run_result {
+            Ok(()) => "successfully".into(),
+            Err(why) => {
+                let mut messages = Vec::new();
+                while let Ok(msg) = msg_receiver.try_recv() {
+                    messages.push(msg);
+                }
+                format!("with error `{why:?}` and disregarded messages `{messages:?}`, ")
+            }
+        };
         println!(
-            "PingPongServer exiting with {} pings received.",
+            "PingPongServer exiting {result_msg} with {} pings received.",
             self.counter
         );
-        Ok(())
+        run_result.map_err(|_| anyhow::Error::msg(result_msg))
     }
 }
 
@@ -74,7 +98,7 @@ async fn ping_pong() -> Result<()> {
     let ping_pong_server = PingPongServer::default();
     let (handle, mut server_ref) = ping_pong_server.spawn();
 
-    server_ref.cast(Ping).await?;
+    server_ref.cast(PingOrBang::Ping).await?;
     let pong = server_ref.call(PingOrPong::Ping).await?;
     assert_eq!(pong, PongOrCount::Pong);
 
@@ -82,7 +106,28 @@ async fn ping_pong() -> Result<()> {
     assert_eq!(count, PongOrCount::Count(2));
 
     server_ref.cancel();
-    timeout(DECI_SECOND, handle).await???;
+    timeout(DECI_SECOND, handle).await??.1?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn ping_pong_bang() -> Result<()> {
+    let ping_pong_server = PingPongServer::default();
+    let (handle, mut server_ref) = ping_pong_server.spawn();
+
+    server_ref.cast(PingOrBang::Bang).await?;
+    match timeout(DECI_SECOND, server_ref.call(PingOrPong::Ping)).await {
+        Ok(Err(_)) | Err(_) => {}
+        Ok(reply) => panic!("Ping Ping Server should have crashed, but got `{reply:?}`."),
+    }
+
+    let err: String = timeout(DECI_SECOND, handle)
+        .await??
+        .1
+        .unwrap_err()
+        .downcast()?;
+    assert_eq!(err, "with error `Received Bang! Blowing up.` and disregarded messages `[Call(Ping, Sender { inner: Some(Inner { state: State { is_complete: false, is_closed: false, is_rx_task_set: true, is_tx_task_set: false } }) })]`, ");
 
     Ok(())
 }

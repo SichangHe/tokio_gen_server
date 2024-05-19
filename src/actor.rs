@@ -67,6 +67,7 @@ impl<A: Actor> Clone for Ref<A> {
     }
 }
 
+#[derive(Debug)]
 pub enum Msg<A: Actor> {
     Call(A::CallMsg, oneshot::Sender<A::Reply>),
     Cast(A::CastMsg),
@@ -188,10 +189,17 @@ pub trait Actor: Sized + Send + 'static {
         async { Ok(()) }
     }
 
-    fn before_exit(&mut self, _env: &mut Ref<Self>) -> impl Future<Output = Result<()>> + Send {
+    fn before_exit(
+        &mut self,
+        _run_result: Result<()>,
+        _env: &mut Ref<Self>,
+        _msg_receiver: &mut Receiver<Msg<Self>>,
+    ) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
     }
 }
+
+pub type ActorHandle<Msg> = JoinHandle<(Receiver<Msg>, Result<()>)>;
 
 /// Provides convenience methods for [`Actor`].
 pub trait ActorExt: Sized {
@@ -210,25 +218,37 @@ pub trait ActorExt: Sized {
         env: &mut Self::Ref,
     ) -> impl Future<Output = Result<()>> + Send;
 
-    fn spawn(self) -> (JoinHandle<Result<()>>, Self::Ref);
+    fn spawn(self) -> (ActorHandle<Self::Msg>, Self::Ref);
 
     fn spawn_with_channel(
         self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
-    ) -> (JoinHandle<Result<()>>, Self::Ref);
+    ) -> (ActorHandle<Self::Msg>, Self::Ref);
 
     fn spawn_with_token(
         self,
         cancellation_token: CancellationToken,
-    ) -> (JoinHandle<Result<()>>, Self::Ref);
+    ) -> (ActorHandle<Self::Msg>, Self::Ref);
 
     fn spawn_with_channel_and_token(
         self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
         cancellation_token: CancellationToken,
-    ) -> (JoinHandle<Result<()>>, Self::Ref);
+    ) -> (ActorHandle<Self::Msg>, Self::Ref);
+
+    fn run_and_handle_exit(
+        self,
+        env: Self::Ref,
+        msg_receiver: Receiver<Self::Msg>,
+    ) -> impl std::future::Future<Output = (Receiver<Self::Msg>, Result<()>)> + Send;
+
+    fn run_till_exit(
+        &mut self,
+        env: &mut Self::Ref,
+        msg_receiver: &mut Receiver<Self::Msg>,
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 }
 
 impl<A: Actor> ActorExt for A {
@@ -267,7 +287,7 @@ impl<A: Actor> ActorExt for A {
         }
     }
 
-    fn spawn(self) -> (JoinHandle<Result<()>>, Self::Ref) {
+    fn spawn(self) -> (ActorHandle<Self::Msg>, Self::Ref) {
         let cancellation_token = CancellationToken::new();
         self.spawn_with_token(cancellation_token)
     }
@@ -276,7 +296,7 @@ impl<A: Actor> ActorExt for A {
         self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
-    ) -> (JoinHandle<Result<()>>, Self::Ref) {
+    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
         let cancellation_token = CancellationToken::new();
         self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
     }
@@ -284,31 +304,47 @@ impl<A: Actor> ActorExt for A {
     fn spawn_with_token(
         self,
         cancellation_token: CancellationToken,
-    ) -> (JoinHandle<Result<()>>, Self::Ref) {
+    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
         let (msg_sender, msg_receiver) = channel(8);
         self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
     }
 
     fn spawn_with_channel_and_token(
-        mut self,
+        self,
         msg_sender: Sender<Self::Msg>,
-        mut msg_receiver: Receiver<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
         cancellation_token: CancellationToken,
-    ) -> (JoinHandle<Result<()>>, Self::Ref) {
+    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
         let actor_ref = Ref {
             msg_sender,
             cancellation_token,
         };
         let handle = {
-            let mut env = actor_ref.clone();
-            spawn(async move {
-                self.init(&mut env).await?;
-                self.handle_continuously(&mut msg_receiver, &mut env)
-                    .await?;
-                self.before_exit(&mut env).await
-            })
+            let env = actor_ref.clone();
+            spawn(self.run_and_handle_exit(env, msg_receiver))
         };
 
         (handle, actor_ref)
+    }
+
+    async fn run_and_handle_exit(
+        mut self,
+        mut env: Self::Ref,
+        mut msg_receiver: Receiver<Self::Msg>,
+    ) -> (Receiver<Self::Msg>, Result<()>) {
+        let run_result = self.run_till_exit(&mut env, &mut msg_receiver).await;
+        let exit_result = self
+            .before_exit(run_result, &mut env, &mut msg_receiver)
+            .await;
+        (msg_receiver, exit_result)
+    }
+
+    async fn run_till_exit(
+        &mut self,
+        env: &mut Self::Ref,
+        msg_receiver: &mut Receiver<Self::Msg>,
+    ) -> Result<()> {
+        self.init(env).await?;
+        self.handle_continuously(msg_receiver, env).await
     }
 }
