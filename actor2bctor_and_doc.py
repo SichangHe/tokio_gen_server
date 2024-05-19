@@ -29,7 +29,7 @@ def substitute_for_sync(text: str) -> str:
                 _ => self.handle_call_or_cast(msg, env)?,
             }""",
         )
-        .replace("enum Msg<A: Actor> {", "enum Msg<A: Bctor> { Exit,")
+        .replace("enum Msg<A: Actor + ?Sized> {", "enum Msg<A: Bctor + ?Sized> { Exit,")
         .replace(
             """match msg {
             Msg""",

@@ -6,7 +6,7 @@ use super::*;
 /// A reference to an instance of [`Actor`],
 /// to cast or call messages on it or cancel it.
 #[derive(Debug)]
-pub struct Ref<A: Actor> {
+pub struct Ref<A: Actor + ?Sized> {
     pub msg_sender: Sender<Msg<A>>,
     pub cancellation_token: CancellationToken,
 }
@@ -84,13 +84,13 @@ impl<A: Actor> Clone for Ref<A> {
 
 /// A message sent to an actor.
 #[derive(Debug)]
-pub enum Msg<A: Actor> {
+pub enum Msg<A: Actor + ?Sized> {
     Call(A::CallMsg, oneshot::Sender<A::Reply>),
     Cast(A::CastMsg),
 }
 
 #[doc = include_str!("actor_doc.md")]
-pub trait Actor: Sized + Send + 'static {
+pub trait Actor: Send + 'static {
     type CallMsg: Send + Sync;
     type CastMsg: Send + Sync;
     type Reply: Send;
@@ -138,7 +138,7 @@ pub type ActorHandle<Msg> = JoinHandle<(Receiver<Msg>, Result<()>)>;
 /// Provides convenience methods for [`Actor`].
 /// Only [`ActorExt::spawn`] and its derivatives are intended to
 /// be used directly.
-pub trait ActorExt: Sized {
+pub trait ActorExt {
     type Ref;
     type Msg;
 

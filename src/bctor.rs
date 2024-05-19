@@ -10,7 +10,7 @@ use std::thread::{spawn, JoinHandle};
 /// A reference to an instance of [`Bctor`],
 /// to cast or call messages on it or cancel it.
 #[derive(Debug)]
-pub struct Ref<A: Bctor> {
+pub struct Ref<A: Bctor + ?Sized> {
     pub msg_sender: Sender<Msg<A>>,
 }
 
@@ -85,14 +85,14 @@ impl<A: Bctor> Clone for Ref<A> {
 
 /// A message sent to an bctor.
 #[derive(Debug)]
-pub enum Msg<A: Bctor> {
+pub enum Msg<A: Bctor + ?Sized> {
     Exit,
     Call(A::CallMsg, oneshot::Sender<A::Reply>),
     Cast(A::CastMsg),
 }
 
 #[doc = include_str!("bctor_doc.md")]
-pub trait Bctor: Sized + Send + 'static {
+pub trait Bctor: Send + 'static {
     type CallMsg: Send + Sync;
     type CastMsg: Send + Sync;
     type Reply: Send;
@@ -136,7 +136,7 @@ pub type BctorHandle<Msg> = JoinHandle<(Receiver<Msg>, Result<()>)>;
 /// Provides convenience methods for [`Bctor`].
 /// Only [`BctorExt::spawn`] and its derivatives are intended to
 /// be used directly.
-pub trait BctorExt: Sized {
+pub trait BctorExt {
     type Ref;
     type Msg;
 
