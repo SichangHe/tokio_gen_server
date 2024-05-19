@@ -32,9 +32,6 @@ impl Actor for PingPongServer {
     // `handle_cast` is called when the actor receives a message and
     // does not need to reply.
     async fn handle_cast(&mut self, msg: Self::T, _env: &mut ActorRef<Self>) -> Result<()> {
-        println!(
-            "`handle_cast` is called when the actor receives a message and does not need to reply."
-        );
         if matches!(msg, PingOrBang::Bang) {
             bail!("Received Bang! Blowing up.");
         }

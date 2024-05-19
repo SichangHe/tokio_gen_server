@@ -34,9 +34,6 @@ impl Bctor for PingPongServer {
     // `handle_cast` is called when the bctor receives a message and
     // does not need to reply.
     fn handle_cast(&mut self, msg: Self::T, _env: &mut BctorRef<Self>) -> Result<()> {
-        println!(
-            "`handle_cast` is called when the bctor receives a message and does not need to reply."
-        );
         if matches!(msg, PingOrBang::Bang) {
             bail!("Received Bang! Blowing up.");
         }
