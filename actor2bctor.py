@@ -53,6 +53,7 @@ timeout(DECI_SECOND, server_ref.call(PingOrPong::Ping)) {
             """.strip(),
             "server_ref.call(PingOrPong::Ping) {",
         )
+        .replace("const DECI_SECOND: Duration = Duration::from_millis(100);", "")
     )
 
     return text
@@ -82,7 +83,9 @@ BCTOR_TEST_NAME: Final = "src/bctor/tests.rs"
 def main():
     transform_file(ACTOR_SRC_NAME, BCTOR_SRC_NAME, MOD_DOC)
     transform_file(ACTOR_TEST_NAME, BCTOR_TEST_NAME)
-    os.system("cargo clippy --fix --allow-dirty --allow-staged --workspace")
+    os.system(
+        "cargo clippy --all-targets --fix --allow-dirty --allow-staged --workspace"
+    )
     os.system("cargo fmt")
 
 

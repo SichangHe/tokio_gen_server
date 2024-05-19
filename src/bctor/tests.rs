@@ -3,11 +3,8 @@ use crate as tokio_gen_server;
 
 // INSTRUCTION: When changed, run `gen_docs.py` to update `bctor_doc.md`.
 use anyhow::{bail, Result};
-use std::time::Duration;
-use tokio::{
-    sync::{mpsc::Receiver, oneshot},
-    time::timeout,
-};
+
+use tokio::sync::{mpsc::Receiver, oneshot};
 use tokio_gen_server::prelude::*;
 
 #[derive(Debug, Default)]
@@ -93,8 +90,6 @@ impl Bctor for PingPongServer {
         run_result.map_err(|_| anyhow::Error::msg(result_msg))
     }
 }
-
-const DECI_SECOND: Duration = Duration::from_millis(100);
 
 #[test]
 fn ping_pong() -> Result<()> {
