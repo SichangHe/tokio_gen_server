@@ -19,8 +19,8 @@ pub mod bctor;
 pub mod prelude {
     #[doc(inline)]
     pub use super::{
-        actor::{Actor, ActorExt, Msg as ActorMsg, Ref as ActorRef},
-        bctor::{Bctor, BctorExt, Msg as BctorMsg, Ref as BctorRef},
+        actor::{AMsg as ActorMsg, ARef as ActorRef, Actor, ActorExt},
+        bctor::{AMsg as BctorMsg, ARef as BctorRef, Bctor, BctorExt},
     };
 }
 
