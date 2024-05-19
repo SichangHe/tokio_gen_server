@@ -1,12 +1,6 @@
 #![doc = include_str!("actor_doc.md")]
 
-use std::{
-    future::Future,
-    sync::{
-        atomic::{AtomicBool, Ordering::Relaxed},
-        Arc,
-    },
-};
+use std::future::Future;
 
 use anyhow::{Context, Result};
 use tokio::{

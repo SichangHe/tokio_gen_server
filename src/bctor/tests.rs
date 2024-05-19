@@ -104,7 +104,6 @@ fn ping_pong() -> Result<()> {
     assert_eq!(count, PongOrCount::Count(2));
 
     server_ref.cancel();
-    server_ref.cast(PingOrBang::Ping)?;
     handle.join().unwrap().1?;
 
     Ok(())

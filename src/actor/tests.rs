@@ -109,7 +109,6 @@ async fn ping_pong() -> Result<()> {
     assert_eq!(count, PongOrCount::Count(2));
 
     server_ref.cancel();
-    server_ref.cast(PingOrBang::Ping).await?;
     timeout(DECI_SECOND, handle).await??.1?;
 
     Ok(())

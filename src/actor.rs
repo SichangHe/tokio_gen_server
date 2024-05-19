@@ -231,7 +231,6 @@ impl<A: Actor> ActorExt for A {
             let env = actor_ref.clone();
             spawn(self.run_and_handle_exit(env, msg_receiver))
         };
-
         (handle, actor_ref)
     }
 

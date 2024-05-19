@@ -5,23 +5,66 @@ import re
 
 
 def substitute_for_sync(text: str) -> str:
+    # Exact replacements.
+    text = (
+        text.replace(
+            """select! {
+                m = receiver.recv() => m,
+                () = cancellation_token.cancelled() => return Ok(()),
+            }""",
+            "receiver.blocking_recv()",
+        )
+        .replace(
+            """select! {
+                maybe_ok = self.handle_call_or_cast(msg, env) => maybe_ok,
+                () = cancellation_token.cancelled() => return Ok(()),
+            }?""",
+            """match msg {
+                Msg::Exit => return Ok(()) ,
+                _ => self.handle_call_or_cast(msg, env)?,
+            }""",
+        )
+        .replace("enum Msg<A: Actor> {", "enum Msg<A: Bctor> { Exit,")
+        .replace(
+            """match msg {
+            Msg""",
+            """match msg {
+            Msg::Exit => unreachable!("Exit signals should be handled before handling `handle_call_or_cast`."),
+            Msg""",
+        )
+        .replace(
+            "self.cancellation_token.cancel()",
+            "_ = self.msg_sender.blocking_send(Msg::Exit)",
+        )
+        .replace(
+            """let cancellation_token = CancellationToken::new();
+        self.spawn_with_token(cancellation_token)""",
+            """let (msg_sender, msg_receiver) = channel(8);
+        self.spawn_with_channel(msg_sender, msg_receiver)""",
+        )
+        .replace(
+            """let cancellation_token = CancellationToken::new();
+        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)""",
+            """let bctor_ref = Ref { msg_sender };
+        let handle = {
+            let env = bctor_ref.clone();
+            spawn(|| self.run_and_handle_exit(env, msg_receiver))
+        };
+        (handle, bctor_ref)""",
+        )
+        .replace(
+            """timeout(DECI_SECOND, server_ref.call(PingOrPong::Ping)).await {
+        Ok(Err(_)) |""",
+            "server_ref.call(PingOrPong::Ping) {",
+        )
+        .replace("const DECI_SECOND: Duration = Duration::from_millis(100);", "")
+    )
+
+    # Regex replacements.
     text = re.sub(r"\n\n(:?///.*\n)*.* fn blocking.* \{(:?\n.+)+\n {4}\}", "", text)
     text = re.sub(
         r"impl Future<Output = (['_\w()<>,: ]+)>(:? +\+ +['_\w]+)*",
         r"\1",
-        text,
-    )
-    text = re.sub(
-        r"""
-select! \{
-\s*(?:[_\w]+) = (.*) => (?:[_\w]+),
-\s*\(\) = cancellation_token.cancelled\(\) => (.*),
-\s*\}
-""".strip().replace("\n", r"\n"),
-        r"""match cancelled.load(Relaxed) {
-        false => \1,
-        true => \2,
-    }""",
         text,
     )
     text = re.sub(r"receiver[\s\n]*\.await", "receiver.blocking_recv()", text)
@@ -31,29 +74,18 @@ select! \{
         "handle.join().unwrap()",
         text,
     )
+    text = re.sub(r"\n.*fn .*token.*(?:\n.*[)\S])*\n", "", text)
+    text = re.sub(r"\n.*cancellation.*\n", "\n", text)
 
+    # Wildcard replacements.
     text = (
         text.replace("Actor", "Bctor")
         .replace("actor", "bctor")
-        .replace("cancellation_token.cancelled()", "cancelled.load(Relaxed)")
-        .replace("cancellation_token.cancel()", "cancelled.store(true, Relaxed)")
-        .replace("cancellation_token", "cancelled")
-        .replace("CancellationToken::new()", "Arc::new(AtomicBool::new(false))")
-        .replace("CancellationToken", "Arc<AtomicBool>")
         .replace("async { Ok(()) }", "Ok(())")
         .replace("async fn ", "fn ")
-        .replace("    spawn(", "    spawn(|| ")
         .replace(".recv(", ".blocking_recv(")
         .replace(".await", "")
         .replace("#[tokio::test]", "#[test]")
-        .replace(
-            """
-timeout(DECI_SECOND, server_ref.call(PingOrPong::Ping)) {
-        Ok(Err(_)) |
-            """.strip(),
-            "server_ref.call(PingOrPong::Ping) {",
-        )
-        .replace("const DECI_SECOND: Duration = Duration::from_millis(100);", "")
     )
 
     return text

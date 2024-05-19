@@ -8,7 +8,6 @@ use std::thread::{spawn, JoinHandle};
 #[derive(Debug)]
 pub struct Ref<A: Bctor> {
     pub msg_sender: Sender<Msg<A>>,
-    pub cancelled: Arc<AtomicBool>,
 }
 
 impl<A: Bctor> Ref<A> {
@@ -38,7 +37,7 @@ impl<A: Bctor> Ref<A> {
 
     /// Cancel the bctor referred to.
     pub fn cancel(&mut self) {
-        self.cancelled.store(true, Relaxed)
+        _ = self.msg_sender.blocking_send(Msg::Exit)
     }
 }
 
@@ -46,13 +45,13 @@ impl<A: Bctor> Clone for Ref<A> {
     fn clone(&self) -> Self {
         Self {
             msg_sender: self.msg_sender.clone(),
-            cancelled: self.cancelled.clone(),
         }
     }
 }
 
 #[derive(Debug)]
 pub enum Msg<A: Bctor> {
+    Exit,
     Call(A::CallMsg, oneshot::Sender<A::Reply>),
     Cast(A::CastMsg),
 }
@@ -113,15 +112,6 @@ pub trait BctorExt: Sized {
         msg_receiver: Receiver<Self::Msg>,
     ) -> (BctorHandle<Self::Msg>, Self::Ref);
 
-    fn spawn_with_token(self, cancelled: Arc<AtomicBool>) -> (BctorHandle<Self::Msg>, Self::Ref);
-
-    fn spawn_with_channel_and_token(
-        self,
-        msg_sender: Sender<Self::Msg>,
-        msg_receiver: Receiver<Self::Msg>,
-        cancelled: Arc<AtomicBool>,
-    ) -> (BctorHandle<Self::Msg>, Self::Ref);
-
     fn run_and_handle_exit(
         self,
         env: Self::Ref,
@@ -141,6 +131,9 @@ impl<A: Bctor> BctorExt for A {
 
     fn handle_call_or_cast(&mut self, msg: Self::Msg, env: &mut Self::Ref) -> Result<()> {
         match msg {
+            Msg::Exit => unreachable!(
+                "Exit signals should be handled before handling `handle_call_or_cast`."
+            ),
             Msg::Call(msg, reply_sender) => self.handle_call(msg, env, reply_sender),
             Msg::Cast(msg) => self.handle_cast(msg, env),
         }
@@ -151,29 +144,24 @@ impl<A: Bctor> BctorExt for A {
         receiver: &mut Receiver<Self::Msg>,
         env: &mut Self::Ref,
     ) -> Result<()> {
-        let cancelled = env.cancelled.clone();
-
         loop {
-            let maybe_msg = match cancelled.load(Relaxed) {
-                false => receiver.blocking_recv(),
-                true => return Ok(()),
-            };
+            let maybe_msg = receiver.blocking_recv();
 
             let msg = match maybe_msg {
                 Some(m) => m,
                 None => return Ok(()),
             };
 
-            match cancelled.load(Relaxed) {
-                false => self.handle_call_or_cast(msg, env),
-                true => return Ok(()),
-            }?;
+            match msg {
+                Msg::Exit => return Ok(()),
+                _ => self.handle_call_or_cast(msg, env)?,
+            };
         }
     }
 
     fn spawn(self) -> (BctorHandle<Self::Msg>, Self::Ref) {
-        let cancelled = Arc::new(AtomicBool::new(false));
-        self.spawn_with_token(cancelled)
+        let (msg_sender, msg_receiver) = channel(8);
+        self.spawn_with_channel(msg_sender, msg_receiver)
     }
 
     fn spawn_with_channel(
@@ -181,30 +169,11 @@ impl<A: Bctor> BctorExt for A {
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
     ) -> (BctorHandle<Self::Msg>, Self::Ref) {
-        let cancelled = Arc::new(AtomicBool::new(false));
-        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancelled)
-    }
-
-    fn spawn_with_token(self, cancelled: Arc<AtomicBool>) -> (BctorHandle<Self::Msg>, Self::Ref) {
-        let (msg_sender, msg_receiver) = channel(8);
-        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancelled)
-    }
-
-    fn spawn_with_channel_and_token(
-        self,
-        msg_sender: Sender<Self::Msg>,
-        msg_receiver: Receiver<Self::Msg>,
-        cancelled: Arc<AtomicBool>,
-    ) -> (BctorHandle<Self::Msg>, Self::Ref) {
-        let bctor_ref = Ref {
-            msg_sender,
-            cancelled,
-        };
+        let bctor_ref = Ref { msg_sender };
         let handle = {
             let env = bctor_ref.clone();
             spawn(|| self.run_and_handle_exit(env, msg_receiver))
         };
-
         (handle, bctor_ref)
     }
 
