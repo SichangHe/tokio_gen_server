@@ -1,7 +1,8 @@
-//! Tests are synchronized to the docstring.
-use crate as tokio_gen_server;
+# An Elixir/Erlang-GenServer-like actor
 
-// INSTRUCTION: Copy below code to `actor_doc.md` every time we change it.
+## Example
+
+```rust
 use anyhow::{bail, Result};
 use std::time::Duration;
 use tokio::{
@@ -133,3 +134,4 @@ async fn ping_pong_bang() -> Result<()> {
 
     Ok(())
 }
+```

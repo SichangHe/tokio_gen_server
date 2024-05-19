@@ -1,3 +1,5 @@
+#![doc = include_str!("actor_doc.md")]
+
 use std::future::Future;
 
 use anyhow::{Context, Result};
@@ -11,8 +13,11 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-pub use actor::{Actor, ActorExt, Msg, Ref};
-
 pub mod actor;
+
+pub mod prelude {
+    pub use super::actor::{Actor, ActorExt, Msg, Ref};
+}
+
 #[cfg(test)]
 mod tests;
