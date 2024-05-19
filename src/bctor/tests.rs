@@ -1,11 +1,7 @@
-# An Elixir/Erlang-GenServer-like Blocking aCTOR
+//! Tests are synchronized to the docstring.
+use crate as tokio_gen_server;
 
-`bctor` mirrors the functionality of `actor`, but blocking.
-Tokio channels are used for compatibility.
-
-## Example
-
-```rust
+// INSTRUCTION: When changed, run `gen_docs.py` to update `bctor_doc.md`.
 use anyhow::{bail, Result};
 use std::time::Duration;
 use tokio::{
@@ -134,4 +130,3 @@ fn ping_pong_bang() -> Result<()> {
 
     Ok(())
 }
-```

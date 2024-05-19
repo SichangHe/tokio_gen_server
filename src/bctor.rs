@@ -1,5 +1,6 @@
 //! Blocking actor. Mirrors functionalities in `actor` but blocking.
 use super::*;
+use std::thread::{spawn, JoinHandle};
 
 // TODO: Error type.
 // TODO: Documentation.
@@ -7,7 +8,7 @@ use super::*;
 #[derive(Debug)]
 pub struct Ref<A: Bctor> {
     pub msg_sender: Sender<Msg<A>>,
-    pub cancellation_token: CancellationToken,
+    pub cancelled: Arc<AtomicBool>,
 }
 
 impl<A: Bctor> Ref<A> {
@@ -37,7 +38,7 @@ impl<A: Bctor> Ref<A> {
 
     /// Cancel the bctor referred to.
     pub fn cancel(&mut self) {
-        self.cancellation_token.cancel()
+        self.cancelled.store(true, Relaxed)
     }
 }
 
@@ -45,7 +46,7 @@ impl<A: Bctor> Clone for Ref<A> {
     fn clone(&self) -> Self {
         Self {
             msg_sender: self.msg_sender.clone(),
-            cancellation_token: self.cancellation_token.clone(),
+            cancelled: self.cancelled.clone(),
         }
     }
 }
@@ -112,23 +113,20 @@ pub trait BctorExt: Sized {
         msg_receiver: Receiver<Self::Msg>,
     ) -> (BctorHandle<Self::Msg>, Self::Ref);
 
-    fn spawn_with_token(
-        self,
-        cancellation_token: CancellationToken,
-    ) -> (BctorHandle<Self::Msg>, Self::Ref);
+    fn spawn_with_token(self, cancelled: Arc<AtomicBool>) -> (BctorHandle<Self::Msg>, Self::Ref);
 
     fn spawn_with_channel_and_token(
         self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
-        cancellation_token: CancellationToken,
+        cancelled: Arc<AtomicBool>,
     ) -> (BctorHandle<Self::Msg>, Self::Ref);
 
     fn run_and_handle_exit(
         self,
         env: Self::Ref,
         msg_receiver: Receiver<Self::Msg>,
-    ) -> impl Future<Output = (Receiver<Self::Msg>, Result<()>)> + Send;
+    ) -> (Receiver<Self::Msg>, Result<()>);
 
     fn run_till_exit(
         &mut self,
@@ -153,12 +151,12 @@ impl<A: Bctor> BctorExt for A {
         receiver: &mut Receiver<Self::Msg>,
         env: &mut Self::Ref,
     ) -> Result<()> {
-        let cancellation_token = env.cancellation_token.clone();
+        let cancelled = env.cancelled.clone();
 
         loop {
-            let maybe_msg = select! {
-                m = receiver.recv() => m,
-                () = cancellation_token.cancelled() => return Ok(()),
+            let maybe_msg = match cancelled.load(Relaxed) {
+                false => receiver.blocking_recv(),
+                true => return Ok(()),
             };
 
             let msg = match maybe_msg {
@@ -166,16 +164,16 @@ impl<A: Bctor> BctorExt for A {
                 None => return Ok(()),
             };
 
-            select! {
-                maybe_ok = self.handle_call_or_cast(msg, env) => maybe_ok,
-                () = cancellation_token.cancelled() => return Ok(()),
+            match cancelled.load(Relaxed) {
+                false => self.handle_call_or_cast(msg, env),
+                true => return Ok(()),
             }?;
         }
     }
 
     fn spawn(self) -> (BctorHandle<Self::Msg>, Self::Ref) {
-        let cancellation_token = CancellationToken::new();
-        self.spawn_with_token(cancellation_token)
+        let cancelled = Arc::new(AtomicBool::new(false));
+        self.spawn_with_token(cancelled)
     }
 
     fn spawn_with_channel(
@@ -183,31 +181,28 @@ impl<A: Bctor> BctorExt for A {
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
     ) -> (BctorHandle<Self::Msg>, Self::Ref) {
-        let cancellation_token = CancellationToken::new();
-        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
+        let cancelled = Arc::new(AtomicBool::new(false));
+        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancelled)
     }
 
-    fn spawn_with_token(
-        self,
-        cancellation_token: CancellationToken,
-    ) -> (BctorHandle<Self::Msg>, Self::Ref) {
+    fn spawn_with_token(self, cancelled: Arc<AtomicBool>) -> (BctorHandle<Self::Msg>, Self::Ref) {
         let (msg_sender, msg_receiver) = channel(8);
-        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
+        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancelled)
     }
 
     fn spawn_with_channel_and_token(
         self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
-        cancellation_token: CancellationToken,
+        cancelled: Arc<AtomicBool>,
     ) -> (BctorHandle<Self::Msg>, Self::Ref) {
         let bctor_ref = Ref {
             msg_sender,
-            cancellation_token,
+            cancelled,
         };
         let handle = {
             let env = bctor_ref.clone();
-            spawn(self.run_and_handle_exit(env, msg_receiver))
+            spawn(|| self.run_and_handle_exit(env, msg_receiver))
         };
 
         (handle, bctor_ref)
@@ -232,3 +227,6 @@ impl<A: Bctor> BctorExt for A {
         self.handle_continuously(msg_receiver, env)
     }
 }
+
+#[cfg(test)]
+mod tests;

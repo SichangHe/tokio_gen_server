@@ -1,6 +1,12 @@
 #![doc = include_str!("actor_doc.md")]
 
-use std::future::Future;
+use std::{
+    future::Future,
+    sync::{
+        atomic::{AtomicBool, Ordering::Relaxed},
+        Arc,
+    },
+};
 
 use anyhow::{Context, Result};
 use tokio::{
@@ -17,7 +23,10 @@ pub mod actor;
 pub mod bctor;
 
 pub mod prelude {
-    pub use super::actor::{Actor, ActorExt, Msg, Ref};
+    pub use super::{
+        actor::{Actor, ActorExt, Msg as ActorMsg, Ref as ActorRef},
+        bctor::{Bctor, BctorExt, Msg as BctorMsg, Ref as BctorRef},
+    };
 }
 
 #[cfg(test)]

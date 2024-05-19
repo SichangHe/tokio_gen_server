@@ -1,11 +1,7 @@
-# An Elixir/Erlang-GenServer-like Blocking aCTOR
+//! Tests are synchronized to the docstring.
+use crate as tokio_gen_server;
 
-`bctor` mirrors the functionality of `actor`, but blocking.
-Tokio channels are used for compatibility.
-
-## Example
-
-```rust
+// INSTRUCTION: When changed, run `gen_docs.py` to update `actor_doc.md`.
 use anyhow::{bail, Result};
 use std::time::Duration;
 use tokio::{
@@ -37,17 +33,17 @@ enum PongOrCount {
     Count(usize),
 }
 
-impl Bctor for PingPongServer {
+impl Actor for PingPongServer {
     type CastMsg = PingOrBang;
     type CallMsg = PingOrPong;
     type Reply = PongOrCount;
 
-    fn init(&mut self, _env: &mut BctorRef<Self>) -> Result<()> {
+    async fn init(&mut self, _env: &mut ActorRef<Self>) -> Result<()> {
         println!("PingPongServer starting.");
         Ok(())
     }
 
-    fn handle_cast(&mut self, msg: Self::CastMsg, _env: &mut BctorRef<Self>) -> Result<()> {
+    async fn handle_cast(&mut self, msg: Self::CastMsg, _env: &mut ActorRef<Self>) -> Result<()> {
         if matches!(msg, PingOrBang::Bang) {
             bail!("Received Bang! Blowing up.");
         }
@@ -56,10 +52,10 @@ impl Bctor for PingPongServer {
         Ok(())
     }
 
-    fn handle_call(
+    async fn handle_call(
         &mut self,
         msg: Self::CallMsg,
-        _env: &mut BctorRef<Self>,
+        _env: &mut ActorRef<Self>,
         reply_sender: oneshot::Sender<Self::Reply>,
     ) -> Result<()> {
         match msg {
@@ -73,11 +69,11 @@ impl Bctor for PingPongServer {
         Ok(())
     }
 
-    fn before_exit(
+    async fn before_exit(
         &mut self,
         run_result: Result<()>,
-        _env: &mut BctorRef<Self>,
-        msg_receiver: &mut Receiver<BctorMsg<Self>>,
+        _env: &mut ActorRef<Self>,
+        msg_receiver: &mut Receiver<ActorMsg<Self>>,
     ) -> Result<()> {
         msg_receiver.close();
         let result_msg = match &run_result {
@@ -100,38 +96,41 @@ impl Bctor for PingPongServer {
 
 const DECI_SECOND: Duration = Duration::from_millis(100);
 
-#[test]
-fn ping_pong() -> Result<()> {
+#[tokio::test]
+async fn ping_pong() -> Result<()> {
     let ping_pong_server = PingPongServer::default();
     let (handle, mut server_ref) = ping_pong_server.spawn();
 
-    server_ref.cast(PingOrBang::Ping)?;
-    let pong = server_ref.call(PingOrPong::Ping)?;
+    server_ref.cast(PingOrBang::Ping).await?;
+    let pong = server_ref.call(PingOrPong::Ping).await?;
     assert_eq!(pong, PongOrCount::Pong);
 
-    let count = server_ref.call(PingOrPong::Pong)?;
+    let count = server_ref.call(PingOrPong::Pong).await?;
     assert_eq!(count, PongOrCount::Count(2));
 
     server_ref.cancel();
-    handle.join().unwrap().1?;
+    timeout(DECI_SECOND, handle).await??.1?;
 
     Ok(())
 }
 
-#[test]
-fn ping_pong_bang() -> Result<()> {
+#[tokio::test]
+async fn ping_pong_bang() -> Result<()> {
     let ping_pong_server = PingPongServer::default();
     let (handle, mut server_ref) = ping_pong_server.spawn();
 
-    server_ref.cast(PingOrBang::Bang)?;
-    match server_ref.call(PingOrPong::Ping) {
-        Err(_) => {}
+    server_ref.cast(PingOrBang::Bang).await?;
+    match timeout(DECI_SECOND, server_ref.call(PingOrPong::Ping)).await {
+        Ok(Err(_)) | Err(_) => {}
         Ok(reply) => panic!("Ping Ping Server should have crashed, but got `{reply:?}`."),
     }
 
-    let err: String = handle.join().unwrap().1.unwrap_err().downcast()?;
+    let err: String = timeout(DECI_SECOND, handle)
+        .await??
+        .1
+        .unwrap_err()
+        .downcast()?;
     assert_eq!(err, "with error `Received Bang! Blowing up.` and disregarded messages `[Call(Ping, Sender { inner: Some(Inner { state: State { is_complete: false, is_closed: false, is_rx_task_set: true, is_tx_task_set: false } }) })]`, ");
 
     Ok(())
 }
-```

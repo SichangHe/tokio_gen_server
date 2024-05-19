@@ -10,11 +10,8 @@ pub struct Ref<A: Actor> {
 }
 
 impl<A: Actor> Ref<A> {
-    pub fn cast(
-        &mut self,
-        msg: A::CastMsg,
-    ) -> impl Future<Output = Result<(), SendError<Msg<A>>>> + '_ {
-        self.msg_sender.send(Msg::Cast(msg))
+    pub async fn cast(&mut self, msg: A::CastMsg) -> Result<(), SendError<Msg<A>>> {
+        self.msg_sender.send(Msg::Cast(msg)).await
     }
 
     pub fn blocking_cast(&mut self, msg: A::CastMsg) -> Result<(), SendError<Msg<A>>> {
@@ -44,12 +41,12 @@ impl<A: Actor> Ref<A> {
             .context("Failed to receive actor's reply")
     }
 
-    pub fn relay_call(
+    pub async fn relay_call(
         &mut self,
         msg: A::CallMsg,
         reply_sender: oneshot::Sender<A::Reply>,
-    ) -> impl Future<Output = Result<(), SendError<Msg<A>>>> + '_ {
-        self.msg_sender.send(Msg::Call(msg, reply_sender))
+    ) -> Result<(), SendError<Msg<A>>> {
+        self.msg_sender.send(Msg::Call(msg, reply_sender)).await
     }
 
     /// Cancel the actor referred to.
@@ -259,3 +256,6 @@ impl<A: Actor> ActorExt for A {
         self.handle_continuously(msg_receiver, env).await
     }
 }
+
+#[cfg(test)]
+mod tests;
