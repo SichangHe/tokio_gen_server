@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/SichangHe/tokio_gen_server/compare/v0.4.0...v0.4.1) - 2024-06-18
+
+### Added
+- *(relax)* allow `!Send` `Actor` to impl `ActorRunExt` (same for `Bctor`)
+
+### Other
+- shut up clippy for `#[test]` in doctest
+- *(ci)* distinguish rust checks
+- hydra first impressions
+- dedup comment in test
+
 ## [0.4.0](https://github.com/SichangHe/tokio_gen_server/compare/v0.3.0...v0.4.0) - 2024-05-19
 
 ### Fixed
