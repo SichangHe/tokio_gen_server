@@ -1,4 +1,6 @@
 #![doc = include_str!("actor_doc.md")]
+// Those are copied from the tests anyway.
+#![allow(clippy::test_attr_in_doctest)]
 
 use std::future::Future;
 
