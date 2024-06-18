@@ -102,8 +102,8 @@ def transform_file(input_filename: str, output_filename: str, header: str = ""):
     output = substitute_for_sync(input)
 
     with open(output_filename, "w") as f:
-        f.write(header + output)
-    os.system(f"rustfmt {output_filename}")
+        _ = f.write(header + output)
+    _ = os.system(f"rustfmt {output_filename}")
 
 
 ACTOR_SRC_NAME: Final = "src/actor.rs"
@@ -124,10 +124,10 @@ BCTOR_TEST_NAME: Final = "src/bctor/tests.rs"
 def actor2bctor() -> None:
     transform_file(ACTOR_SRC_NAME, BCTOR_SRC_NAME, MOD_DOC)
     transform_file(ACTOR_TEST_NAME, BCTOR_TEST_NAME, BCTOR_HEADER + "\n")
-    os.system(
+    _ = os.system(
         "cargo clippy --all-targets --fix --allow-dirty --allow-staged --workspace"
     )
-    os.system("cargo fmt")
+    _ = os.system("cargo fmt")
 
 
 def concate_and_paste(
@@ -141,7 +141,7 @@ def concate_and_paste(
         input_lines = f.readlines()
     input_trimmed = "".join(input_lines[n_cutoff_line:])
     with open(output_filename, "w") as f:
-        f.write(header + input_trimmed + footer)
+        _ = f.write(header + input_trimmed + footer)
 
 
 DOC_HEADER: Final = f"<!-- {NOTICE} -->"

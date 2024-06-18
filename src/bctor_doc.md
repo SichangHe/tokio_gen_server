@@ -8,7 +8,6 @@ Tokio channels are used for compatibility.
 
 ```rust
 use anyhow::{bail, Result};
-
 use tokio::sync::{mpsc::Receiver, oneshot};
 use tokio_gen_server::prelude::*;
 

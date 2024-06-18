@@ -16,7 +16,7 @@ pub struct Ref<L, T, R> {
 
 /// A reference to an instance of [`Bctor`],
 /// to cast or call messages on it or cancel it.
-pub type ARef<A> = Ref<<A as Bctor>::L, <A as Bctor>::T, <A as Bctor>::R>;
+pub type BctorRef<A> = Ref<<A as Bctor>::L, <A as Bctor>::T, <A as Bctor>::R>;
 
 impl<L, T, R> Ref<L, T, R> {
     /// Cast a message to the bctor and do not expect a reply.
@@ -106,7 +106,7 @@ pub enum Msg<L, T, R> {
 }
 
 /// A message sent to an bctor.
-pub type AMsg<A> = Msg<<A as Bctor>::L, <A as Bctor>::T, <A as Bctor>::R>;
+pub type BctorMsg<A> = Msg<<A as Bctor>::L, <A as Bctor>::T, <A as Bctor>::R>;
 
 #[doc = include_str!("bctor_doc.md")]
 pub trait Bctor {
@@ -118,12 +118,12 @@ pub trait Bctor {
     type R;
 
     /// Called when the bctor starts.
-    fn init(&mut self, _env: &mut ARef<Self>) -> Result<()> {
+    fn init(&mut self, _env: &mut BctorRef<Self>) -> Result<()> {
         Ok(())
     }
 
     /// Called when the bctor receives a message and does not need to reply.
-    fn handle_cast(&mut self, _msg: Self::T, _env: &mut ARef<Self>) -> Result<()> {
+    fn handle_cast(&mut self, _msg: Self::T, _env: &mut BctorRef<Self>) -> Result<()> {
         Ok(())
     }
 
@@ -134,7 +134,7 @@ pub trait Bctor {
     fn handle_call(
         &mut self,
         _msg: Self::L,
-        _env: &mut ARef<Self>,
+        _env: &mut BctorRef<Self>,
         _reply_sender: oneshot::Sender<Self::R>,
     ) -> Result<()> {
         Ok(())
@@ -144,8 +144,8 @@ pub trait Bctor {
     fn before_exit(
         &mut self,
         _run_result: Result<()>,
-        _env: &mut ARef<Self>,
-        _msg_receiver: &mut Receiver<AMsg<Self>>,
+        _env: &mut BctorRef<Self>,
+        _msg_receiver: &mut Receiver<BctorMsg<Self>>,
     ) -> Result<()> {
         Ok(())
     }
@@ -199,13 +199,13 @@ pub trait BctorRunExt {
 
 impl<A> BctorRunExt for A
 where
-    A: Bctor + Send,
+    A: Bctor,
     A::L: Send,
     A::T: Send,
     A::R: Send,
 {
-    type Ref = ARef<A>;
-    type Msg = AMsg<A>;
+    type Ref = BctorRef<A>;
+    type Msg = BctorMsg<A>;
 
     fn handle_call_or_cast(&mut self, msg: Self::Msg, env: &mut Self::Ref) -> Result<()> {
         match msg {
@@ -264,8 +264,8 @@ where
     A::T: Send,
     A::R: Send,
 {
-    type Ref = ARef<A>;
-    type Msg = AMsg<A>;
+    type Ref = BctorRef<A>;
+    type Msg = BctorMsg<A>;
 
     fn spawn(self) -> (BctorHandle<Self::Msg>, Self::Ref) {
         let (msg_sender, msg_receiver) = channel(8);

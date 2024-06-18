@@ -13,7 +13,7 @@ pub struct Ref<L, T, R> {
 
 /// A reference to an instance of [`Actor`],
 /// to cast or call messages on it or cancel it.
-pub type ARef<A> = Ref<<A as Actor>::L, <A as Actor>::T, <A as Actor>::R>;
+pub type ActorRef<A> = Ref<<A as Actor>::L, <A as Actor>::T, <A as Actor>::R>;
 
 impl<L, T, R> Ref<L, T, R> {
     /// Cast a message to the actor and do not expect a reply.
@@ -104,7 +104,7 @@ pub enum Msg<L, T, R> {
 }
 
 /// A message sent to an actor.
-pub type AMsg<A> = Msg<<A as Actor>::L, <A as Actor>::T, <A as Actor>::R>;
+pub type ActorMsg<A> = Msg<<A as Actor>::L, <A as Actor>::T, <A as Actor>::R>;
 
 #[doc = include_str!("actor_doc.md")]
 pub trait Actor {
@@ -116,7 +116,7 @@ pub trait Actor {
     type R;
 
     /// Called when the actor starts.
-    fn init(&mut self, _env: &mut ARef<Self>) -> impl Future<Output = Result<()>> + Send {
+    fn init(&mut self, _env: &mut ActorRef<Self>) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
     }
 
@@ -124,7 +124,7 @@ pub trait Actor {
     fn handle_cast(
         &mut self,
         _msg: Self::T,
-        _env: &mut ARef<Self>,
+        _env: &mut ActorRef<Self>,
     ) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
     }
@@ -136,7 +136,7 @@ pub trait Actor {
     fn handle_call(
         &mut self,
         _msg: Self::L,
-        _env: &mut ARef<Self>,
+        _env: &mut ActorRef<Self>,
         _reply_sender: oneshot::Sender<Self::R>,
     ) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
@@ -146,8 +146,8 @@ pub trait Actor {
     fn before_exit(
         &mut self,
         _run_result: Result<()>,
-        _env: &mut ARef<Self>,
-        _msg_receiver: &mut Receiver<AMsg<Self>>,
+        _env: &mut ActorRef<Self>,
+        _msg_receiver: &mut Receiver<ActorMsg<Self>>,
     ) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
     }
@@ -197,36 +197,36 @@ pub trait ActorRunExt {
         &mut self,
         msg: Self::Msg,
         env: &mut Self::Ref,
-    ) -> impl Future<Output = Result<()>> + Send;
+    ) -> impl Future<Output = Result<()>>;
 
     fn handle_continuously(
         &mut self,
         receiver: &mut Receiver<Self::Msg>,
         env: &mut Self::Ref,
-    ) -> impl Future<Output = Result<()>> + Send;
+    ) -> impl Future<Output = Result<()>>;
 
     fn run_and_handle_exit(
         self,
         env: Self::Ref,
         msg_receiver: Receiver<Self::Msg>,
-    ) -> impl Future<Output = (Receiver<Self::Msg>, Result<()>)> + Send;
+    ) -> impl Future<Output = (Receiver<Self::Msg>, Result<()>)>;
 
     fn run_till_exit(
         &mut self,
         env: &mut Self::Ref,
         msg_receiver: &mut Receiver<Self::Msg>,
-    ) -> impl Future<Output = Result<()>> + Send;
+    ) -> impl Future<Output = Result<()>>;
 }
 
 impl<A> ActorRunExt for A
 where
-    A: Actor + Send,
+    A: Actor,
     A::L: Send,
     A::T: Send,
     A::R: Send,
 {
-    type Ref = ARef<A>;
-    type Msg = AMsg<A>;
+    type Ref = ActorRef<A>;
+    type Msg = ActorMsg<A>;
 
     async fn handle_call_or_cast(&mut self, msg: Self::Msg, env: &mut Self::Ref) -> Result<()> {
         match msg {
@@ -289,8 +289,8 @@ where
     A::T: Send,
     A::R: Send,
 {
-    type Ref = ARef<A>;
-    type Msg = AMsg<A>;
+    type Ref = ActorRef<A>;
+    type Msg = ActorMsg<A>;
 
     fn spawn(self) -> (ActorHandle<Self::Msg>, Self::Ref) {
         let cancellation_token = CancellationToken::new();

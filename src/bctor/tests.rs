@@ -4,7 +4,6 @@ use crate as tokio_gen_server;
 
 // INSTRUCTION: When changed, run `bctor2bctor_and_doc.py`.
 use anyhow::{bail, Result};
-
 use tokio::sync::{mpsc::Receiver, oneshot};
 use tokio_gen_server::prelude::*;
 
