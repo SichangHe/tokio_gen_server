@@ -95,7 +95,7 @@ impl Actor for PingPongServer {
 async fn ping_pong() -> Result<()> {
     // Call `spawn` on the actor to start it.
     let ping_pong_server = PingPongServer::default();
-    let (handle, mut server_ref) = ping_pong_server.spawn();
+    let (handle, server_ref) = ping_pong_server.spawn();
 
     // Cast a message to the actor and do not expect a reply.
     server_ref.cast(PingOrBang::Ping).await?;
@@ -122,7 +122,7 @@ async fn ping_pong() -> Result<()> {
 #[tokio::test]
 async fn ping_pong_bang() -> Result<()> {
     let ping_pong_server = PingPongServer::default();
-    let (handle, mut server_ref) = ping_pong_server.spawn();
+    let (handle, server_ref) = ping_pong_server.spawn();
 
     // Cast the `Bang` message to crash the actor.
     server_ref.cast(PingOrBang::Bang).await?;

@@ -91,7 +91,7 @@ impl Bctor for PingPongServer {
 fn ping_pong() -> Result<()> {
     // Call `spawn` on the bctor to start it.
     let ping_pong_server = PingPongServer::default();
-    let (handle, mut server_ref) = ping_pong_server.spawn();
+    let (handle, server_ref) = ping_pong_server.spawn();
 
     // Cast a message to the bctor and do not expect a reply.
     server_ref.cast(PingOrBang::Ping)?;
@@ -118,7 +118,7 @@ fn ping_pong() -> Result<()> {
 #[test]
 fn ping_pong_bang() -> Result<()> {
     let ping_pong_server = PingPongServer::default();
-    let (handle, mut server_ref) = ping_pong_server.spawn();
+    let (handle, server_ref) = ping_pong_server.spawn();
 
     // Cast the `Bang` message to crash the bctor.
     server_ref.cast(PingOrBang::Bang)?;

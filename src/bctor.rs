@@ -24,7 +24,7 @@ pub type BctorRef<A> = Ref<<A as Bctor>::L, <A as Bctor>::T, <A as Bctor>::R>;
 
 impl<L, T, R> Ref<L, T, R> {
     /// Cast a message to the bctor and do not expect a reply.
-    pub fn cast(&mut self, msg: T) -> Result<(), SendError<Msg<L, T, R>>> {
+    pub fn cast(&self, msg: T) -> Result<(), SendError<Msg<L, T, R>>> {
         self.msg_sender.blocking_send(Msg::Cast(msg))
     }
 
@@ -33,14 +33,14 @@ impl<L, T, R> Ref<L, T, R> {
     /// # Panics
     ///
     /// This function panics if called within an asynchronous execution context.
-    pub fn blocking_cast(&mut self, msg: T) -> Result<(), SendError<Msg<L, T, R>>> {
+    pub fn blocking_cast(&self, msg: T) -> Result<(), SendError<Msg<L, T, R>>> {
         self.msg_sender.blocking_send(Msg::Cast(msg))
     }
 
     /// Call the bctor and wait for a reply.
     ///
     /// To time out the call, use [`tokio::time::timeout`].
-    pub fn call(&mut self, msg: L) -> Result<R>
+    pub fn call(&self, msg: L) -> Result<R>
     where
         L: Send + Sync + 'static,
         T: Send + Sync + 'static,
@@ -62,7 +62,7 @@ impl<L, T, R> Ref<L, T, R> {
     /// # Panics
     ///
     /// This function panics if called within an asynchronous execution context.
-    pub fn blocking_call(&mut self, msg: L) -> Result<R>
+    pub fn blocking_call(&self, msg: L) -> Result<R>
     where
         L: Send + Sync + 'static,
         T: Send + Sync + 'static,
@@ -80,7 +80,7 @@ impl<L, T, R> Ref<L, T, R> {
     /// Call the bctor and let it reply via a given channel sender.
     /// Useful for relaying a call from some other caller.
     pub fn relay_call(
-        &mut self,
+        &self,
         msg: L,
         reply_sender: oneshot::Sender<R>,
     ) -> Result<(), SendError<Msg<L, T, R>>> {
@@ -88,7 +88,7 @@ impl<L, T, R> Ref<L, T, R> {
     }
 
     /// Cancel the bctor referred to, so it exits.
-    pub fn cancel(&mut self) {
+    pub fn cancel(&self) {
         _ = self.msg_sender.blocking_send(Msg::Exit)
     }
 }

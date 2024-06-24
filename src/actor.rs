@@ -17,7 +17,7 @@ pub type ActorRef<A> = Ref<<A as Actor>::L, <A as Actor>::T, <A as Actor>::R>;
 
 impl<L, T, R> Ref<L, T, R> {
     /// Cast a message to the actor and do not expect a reply.
-    pub async fn cast(&mut self, msg: T) -> Result<(), SendError<Msg<L, T, R>>> {
+    pub async fn cast(&self, msg: T) -> Result<(), SendError<Msg<L, T, R>>> {
         self.msg_sender.send(Msg::Cast(msg)).await
     }
 
@@ -26,14 +26,14 @@ impl<L, T, R> Ref<L, T, R> {
     /// # Panics
     ///
     /// This function panics if called within an asynchronous execution context.
-    pub fn blocking_cast(&mut self, msg: T) -> Result<(), SendError<Msg<L, T, R>>> {
+    pub fn blocking_cast(&self, msg: T) -> Result<(), SendError<Msg<L, T, R>>> {
         self.msg_sender.blocking_send(Msg::Cast(msg))
     }
 
     /// Call the actor and wait for a reply.
     ///
     /// To time out the call, use [`tokio::time::timeout`].
-    pub async fn call(&mut self, msg: L) -> Result<R>
+    pub async fn call(&self, msg: L) -> Result<R>
     where
         L: Send + Sync + 'static,
         T: Send + Sync + 'static,
@@ -56,7 +56,7 @@ impl<L, T, R> Ref<L, T, R> {
     /// # Panics
     ///
     /// This function panics if called within an asynchronous execution context.
-    pub fn blocking_call(&mut self, msg: L) -> Result<R>
+    pub fn blocking_call(&self, msg: L) -> Result<R>
     where
         L: Send + Sync + 'static,
         T: Send + Sync + 'static,
@@ -74,7 +74,7 @@ impl<L, T, R> Ref<L, T, R> {
     /// Call the actor and let it reply via a given channel sender.
     /// Useful for relaying a call from some other caller.
     pub async fn relay_call(
-        &mut self,
+        &self,
         msg: L,
         reply_sender: oneshot::Sender<R>,
     ) -> Result<(), SendError<Msg<L, T, R>>> {
@@ -82,7 +82,7 @@ impl<L, T, R> Ref<L, T, R> {
     }
 
     /// Cancel the actor referred to, so it exits.
-    pub fn cancel(&mut self) {
+    pub fn cancel(&self) {
         self.cancellation_token.cancel()
     }
 }
