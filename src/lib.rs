@@ -11,7 +11,7 @@ use tokio::{
         mpsc::{channel, error::SendError, Receiver, Sender},
         oneshot,
     },
-    task::JoinHandle,
+    task::{AbortHandle, JoinHandle, JoinSet},
 };
 use tokio_util::sync::CancellationToken;
 
@@ -21,8 +21,8 @@ pub mod bctor;
 pub mod prelude {
     #[doc(inline)]
     pub use super::{
-        actor::{Actor, ActorExt, ActorMsg, ActorRef},
-        bctor::{Bctor, BctorExt, BctorMsg, BctorRef},
+        actor::{Actor, ActorExt, ActorHandle, ActorMsg, ActorOutput, ActorRef},
+        bctor::{Bctor, BctorExt, BctorHandle, BctorMsg, BctorRef},
     };
 }
 

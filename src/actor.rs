@@ -153,23 +153,16 @@ pub trait Actor {
     }
 }
 
-pub type ActorHandle<Msg> = JoinHandle<(Receiver<Msg>, Result<()>)>;
+pub type ActorOutput<Msg> = (Receiver<Msg>, Result<()>);
+pub type ActorHandle<Msg> = JoinHandle<ActorOutput<Msg>>;
 
 /// Provides convenience methods for spawning [`Actor`] instances.
 pub trait ActorExt {
     type Ref;
     type Msg;
 
-    /// Spawn the actor in a thread.
+    /// Spawn the actor in a task.
     fn spawn(self) -> (ActorHandle<Self::Msg>, Self::Ref);
-
-    /// [`ActorExt::spawn_with_channel`] + [`ActorExt::spawn_with_token`].
-    fn spawn_with_channel_and_token(
-        self,
-        msg_sender: Sender<Self::Msg>,
-        msg_receiver: Receiver<Self::Msg>,
-        cancellation_token: CancellationToken,
-    ) -> (ActorHandle<Self::Msg>, Self::Ref);
 
     /// Same as [`ActorExt::spawn`] but with the given cancellation token.
     /// Useful for leveraging [`CancellationToken`] inheritance.
@@ -185,6 +178,51 @@ pub trait ActorExt {
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
     ) -> (ActorHandle<Self::Msg>, Self::Ref);
+
+    /// [`ActorExt::spawn_with_channel`] + [`ActorExt::spawn_with_token`].
+    fn spawn_with_channel_and_token(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+        cancellation_token: CancellationToken,
+    ) -> (ActorHandle<Self::Msg>, Self::Ref);
+
+    /// Spawn the actor in a task from the given [`JoinSet`].
+    fn spawn_from_join_set(
+        self,
+        join_set: &mut JoinSet<ActorOutput<Self::Msg>>,
+    ) -> (AbortHandle, Self::Ref);
+
+    /// Same as [`ActorExt::spawn_from_join_set`] but with
+    /// the given cancellation token.
+    /// Useful for leveraging [`CancellationToken`] inheritance.
+    fn spawn_with_token_from_join_set(
+        self,
+        cancellation_token: CancellationToken,
+        join_set: &mut JoinSet<ActorOutput<Self::Msg>>,
+    ) -> (AbortHandle, Self::Ref);
+
+    /// Same as [`ActorExt::spawn_from_join_set`] but with both ends of
+    /// the channel given.
+    /// Useful for relaying messages or reusing channels.
+    fn spawn_with_channel_from_join_set(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+        join_set: &mut JoinSet<ActorOutput<Self::Msg>>,
+    ) -> (AbortHandle, Self::Ref);
+
+    /// [`ActorExt::spawn_with_channel_from_join_set`] +
+    /// [`ActorExt::spawn_with_token_from_join_set`].
+    fn spawn_with_channel_and_token_from_join_set(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+        cancellation_token: CancellationToken,
+        join_set: &mut JoinSet<ActorOutput<Self::Msg>>,
+    ) -> (AbortHandle, Self::Ref);
+
+    // This comment preserves the blank line above for code generation.
 }
 
 /// Provides convenience methods for running [`Actor`] instances.
@@ -297,6 +335,23 @@ where
         self.spawn_with_token(cancellation_token)
     }
 
+    fn spawn_with_token(
+        self,
+        cancellation_token: CancellationToken,
+    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
+        let (msg_sender, msg_receiver) = channel(8);
+        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
+    }
+
+    fn spawn_with_channel(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
+        let cancellation_token = CancellationToken::new();
+        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
+    }
+
     fn spawn_with_channel_and_token(
         self,
         msg_sender: Sender<Self::Msg>,
@@ -314,22 +369,62 @@ where
         (handle, actor_ref)
     }
 
-    fn spawn_with_token(
+    fn spawn_from_join_set(
         self,
-        cancellation_token: CancellationToken,
-    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
-        let (msg_sender, msg_receiver) = channel(8);
-        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
+        join_set: &mut JoinSet<ActorOutput<Self::Msg>>,
+    ) -> (AbortHandle, Self::Ref) {
+        let cancellation_token = CancellationToken::new();
+        self.spawn_with_token_from_join_set(cancellation_token, join_set)
     }
 
-    fn spawn_with_channel(
+    fn spawn_with_token_from_join_set(
+        self,
+        cancellation_token: CancellationToken,
+        join_set: &mut JoinSet<ActorOutput<Self::Msg>>,
+    ) -> (AbortHandle, Self::Ref) {
+        let (msg_sender, msg_receiver) = channel(8);
+        self.spawn_with_channel_and_token_from_join_set(
+            msg_sender,
+            msg_receiver,
+            cancellation_token,
+            join_set,
+        )
+    }
+
+    fn spawn_with_channel_from_join_set(
         self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
-    ) -> (ActorHandle<Self::Msg>, Self::Ref) {
+        join_set: &mut JoinSet<ActorOutput<Self::Msg>>,
+    ) -> (AbortHandle, Self::Ref) {
         let cancellation_token = CancellationToken::new();
-        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
+        self.spawn_with_channel_and_token_from_join_set(
+            msg_sender,
+            msg_receiver,
+            cancellation_token,
+            join_set,
+        )
     }
+
+    fn spawn_with_channel_and_token_from_join_set(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+        cancellation_token: CancellationToken,
+        join_set: &mut JoinSet<ActorOutput<Self::Msg>>,
+    ) -> (AbortHandle, Self::Ref) {
+        let actor_ref = Ref {
+            msg_sender,
+            cancellation_token,
+        };
+        let handle = {
+            let env = actor_ref.clone();
+            join_set.spawn(self.run_and_handle_exit(env, msg_receiver))
+        };
+        (handle, actor_ref)
+    }
+
+    // This comment preserves the blank line above for code generation.
 }
 
 #[cfg(test)]

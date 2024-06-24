@@ -1,5 +1,9 @@
 // DO NOT modify manually! Generate with `actor2bctor_and_doc.py`.
-//! Blocking actor. Mirrors functionalities in `actor` but blocking.
+//! Blocking aCTOR. Mirrors functionalities in `actor` but blocking.
+//!
+//! Unlike Actors, Bctors are spawn using [`spawn`] from [`std`] and
+//! cannot be cancelled during the handling of each message.
+//! Bctors are supposed to be long-lived.
 //!
 //! Please see the documentation for [`Bctor`].
 use super::*;
@@ -151,7 +155,8 @@ pub trait Bctor {
     }
 }
 
-pub type BctorHandle<Msg> = JoinHandle<(Receiver<Msg>, Result<()>)>;
+pub type BctorOutput<Msg> = (Receiver<Msg>, Result<()>);
+pub type BctorHandle<Msg> = JoinHandle<BctorOutput<Msg>>;
 
 /// Provides convenience methods for spawning [`Bctor`] instances.
 pub trait BctorExt {
@@ -168,6 +173,8 @@ pub trait BctorExt {
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
     ) -> (BctorHandle<Self::Msg>, Self::Ref);
+
+    // This comment preserves the blank line above for code generation.
 }
 
 /// Provides convenience methods for running [`Bctor`] instances.
@@ -284,6 +291,8 @@ where
         };
         (handle, bctor_ref)
     }
+
+    // This comment preserves the blank line above for code generation.
 }
 
 #[cfg(test)]

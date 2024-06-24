@@ -63,6 +63,7 @@ def substitute_for_sync(text: str) -> str:
             "server_ref.call(PingOrPong::Ping) {",
         )
         .replace("const DECI_SECOND: Duration = Duration::from_millis(100);", "")
+        .replace(" task", " thread")
     )
 
     # Regex replacements.
@@ -79,7 +80,7 @@ def substitute_for_sync(text: str) -> str:
         "handle.join().unwrap()",
         text,
     )
-    text = re.sub(r"\n(:?\s*///.*\n)*.*fn .*token.*(?:\n.*[)\S])*\n", "\n", text)
+    text = re.sub(r"\n(:?\s*///.*\n)*.*fn .*(token|join_set).*(?:\n.*[)\S])*\n", "\n", text)
     text = re.sub(r"\n.*cancellation.*\n", "\n", text)
 
     # Wildcard replacements.
@@ -112,7 +113,11 @@ BCTOR_HEADER: Final = f"// {NOTICE}"
 MOD_DOC: Final = (
     BCTOR_HEADER
     + """
-//! Blocking actor. Mirrors functionalities in `actor` but blocking.
+//! Blocking aCTOR. Mirrors functionalities in `actor` but blocking.
+//!
+//! Unlike Actors, Bctors are spawn using [`spawn`] from [`std`] and
+//! cannot be cancelled during the handling of each message.
+//! Bctors are supposed to be long-lived.
 //!
 """
 )
