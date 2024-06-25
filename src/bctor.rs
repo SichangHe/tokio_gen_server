@@ -42,9 +42,7 @@ impl<L, T, R> Ref<L, T, R> {
     /// To time out the call, use [`tokio::time::timeout`].
     pub fn call(&self, msg: L) -> Result<R>
     where
-        L: Send + Sync + 'static,
-        T: Send + Sync + 'static,
-        R: Send + Sync + 'static,
+        Msg<L, T, R>: Send + Sync + 'static,
     {
         // NB: Using the `oneshot` channel here is inexpensive because its only
         // overhead is 1 `Arc` and 5 extra words of allocation.
@@ -64,9 +62,7 @@ impl<L, T, R> Ref<L, T, R> {
     /// This function panics if called within an asynchronous execution context.
     pub fn blocking_call(&self, msg: L) -> Result<R>
     where
-        L: Send + Sync + 'static,
-        T: Send + Sync + 'static,
-        R: Send + Sync + 'static,
+        Msg<L, T, R>: Send + Sync + 'static,
     {
         let (reply_sender, reply_receiver) = oneshot::channel();
         self.msg_sender
@@ -207,9 +203,7 @@ pub trait BctorRunExt {
 impl<A> BctorRunExt for A
 where
     A: Bctor,
-    A::L: Send,
-    A::T: Send,
-    A::R: Send,
+    BctorMsg<A>: Send,
 {
     type Ref = BctorRef<A>;
     type Msg = BctorMsg<A>;
@@ -267,9 +261,7 @@ where
 impl<A> BctorExt for A
 where
     A: Bctor + Send + 'static,
-    A::L: Send,
-    A::T: Send,
-    A::R: Send,
+    BctorMsg<A>: Send,
 {
     type Ref = BctorRef<A>;
     type Msg = BctorMsg<A>;

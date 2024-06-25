@@ -35,9 +35,7 @@ impl<L, T, R> Ref<L, T, R> {
     /// To time out the call, use [`tokio::time::timeout`].
     pub async fn call(&self, msg: L) -> Result<R>
     where
-        L: Send + Sync + 'static,
-        T: Send + Sync + 'static,
-        R: Send + Sync + 'static,
+        Msg<L, T, R>: Send + Sync + 'static,
     {
         // NB: Using the `oneshot` channel here is inexpensive because its only
         // overhead is 1 `Arc` and 5 extra words of allocation.
@@ -58,9 +56,7 @@ impl<L, T, R> Ref<L, T, R> {
     /// This function panics if called within an asynchronous execution context.
     pub fn blocking_call(&self, msg: L) -> Result<R>
     where
-        L: Send + Sync + 'static,
-        T: Send + Sync + 'static,
-        R: Send + Sync + 'static,
+        Msg<L, T, R>: Send + Sync + 'static,
     {
         let (reply_sender, reply_receiver) = oneshot::channel();
         self.msg_sender
@@ -259,9 +255,7 @@ pub trait ActorRunExt {
 impl<A> ActorRunExt for A
 where
     A: Actor,
-    A::L: Send,
-    A::T: Send,
-    A::R: Send,
+    ActorMsg<A>: Send,
 {
     type Ref = ActorRef<A>;
     type Msg = ActorMsg<A>;
@@ -323,9 +317,7 @@ where
 impl<A> ActorExt for A
 where
     A: Actor + Send + 'static,
-    A::L: Send,
-    A::T: Send,
-    A::R: Send,
+    ActorMsg<A>: Send,
 {
     type Ref = ActorRef<A>;
     type Msg = ActorMsg<A>;
