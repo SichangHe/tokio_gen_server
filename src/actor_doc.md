@@ -191,3 +191,15 @@ const DECI_SECOND: Duration = Duration::from_millis(100);
 ```
 
 </details>
+
+---
+
+<details>
+<summary>This trait is not object-safe.</summary>
+
+```compile_fail
+use tokio_gen_server::prelude::*;
+let _: Box<dyn Actor<Call = (), Cast = (), Reply = ()>>;
+```
+
+</details>

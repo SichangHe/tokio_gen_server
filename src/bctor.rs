@@ -175,6 +175,16 @@ pub trait Bctor {
 }
 
 /// Provides convenience methods for spawning [`Bctor`] instances.
+///
+/// <details>
+/// <summary>This trait is object-safe.</summary>
+///
+/// ```
+/// use tokio_gen_server::prelude::*;
+/// let _: Box<dyn BctorExt<Ref = (), Msg = (), RunResult = ()>>;
+/// ```
+///
+/// </details>
 pub trait BctorExt {
     type Ref;
     type Msg;
@@ -236,6 +246,16 @@ where
 
 /// Provides convenience methods for running [`Bctor`] instances.
 /// Not intended for users.
+///
+/// <details>
+/// <summary>This trait is object-safe.</summary>
+///
+/// ```
+/// use tokio_gen_server::bctor::BctorRunExt;
+/// let _: Box<dyn BctorRunExt<Env = (), Msg = ()>>;
+/// ```
+///
+/// </details>
 pub trait BctorRunExt {
     type Env;
     type Msg;

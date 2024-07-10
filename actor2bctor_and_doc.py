@@ -86,6 +86,18 @@ def substitute_for_sync(text: str) -> str:
         )
         .replace("const DECI_SECOND: Duration = Duration::from_millis(100);", "")
         .replace(" task", " thread")
+        .replace(
+            """/// <summary>This trait is not object-safe.</summary>
+///
+/// ```compile_fail
+/// use tokio_gen_server::actor::ActorRunExt;
+""",
+            """/// <summary>This trait is object-safe.</summary>
+///
+/// ```
+/// use tokio_gen_server::bctor::BctorRunExt;
+""",
+        )
     )
 
     # Regex replacements.
@@ -209,6 +221,23 @@ so you can gracefully shut down.
 
 ```rust
 """
+ACTOR_DOC_FOOTER: Final = """
+```
+
+</details>
+
+---
+
+<details>
+<summary>This trait is not object-safe.</summary>
+
+```compile_fail
+use tokio_gen_server::prelude::*;
+let _: Box<dyn Actor<Call = (), Cast = (), Reply = ()>>;
+```
+
+</details>
+""".lstrip()
 BCTOR_DOC_NAME: Final = "src/bctor_doc.md"
 BCTOR_DOC_HEADER: Final = f"""{DOC_HEADER}
 # An Elixir/Erlang-GenServer-like Blocking aCTOR
@@ -224,7 +253,19 @@ Tokio channels are used for compatibility.
 
 ```rust
 """
-FOOTER: Final = """
+BCTOR_DOC_FOOTER: Final = """
+```
+
+</details>
+
+---
+
+<details>
+<summary>This trait is object-safe.</summary>
+
+```
+use tokio_gen_server::prelude::*;
+let _: Box<dyn Bctor<Call = (), Cast = (), Reply = ()>>;
 ```
 
 </details>
@@ -232,8 +273,12 @@ FOOTER: Final = """
 
 
 def gen_docs() -> None:
-    concate_and_paste(ACTOR_TEST_NAME, ACTOR_DOC_NAME, 4, ACTOR_DOC_HEADER, FOOTER)
-    concate_and_paste(BCTOR_TEST_NAME, BCTOR_DOC_NAME, 5, BCTOR_DOC_HEADER, FOOTER)
+    concate_and_paste(
+        ACTOR_TEST_NAME, ACTOR_DOC_NAME, 4, ACTOR_DOC_HEADER, ACTOR_DOC_FOOTER
+    )
+    concate_and_paste(
+        BCTOR_TEST_NAME, BCTOR_DOC_NAME, 5, BCTOR_DOC_HEADER, BCTOR_DOC_FOOTER
+    )
 
 
 def main() -> None:

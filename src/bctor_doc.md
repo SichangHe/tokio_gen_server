@@ -168,3 +168,15 @@ enum PongOrCount {
 ```
 
 </details>
+
+---
+
+<details>
+<summary>This trait is object-safe.</summary>
+
+```
+use tokio_gen_server::prelude::*;
+let _: Box<dyn Bctor<Call = (), Cast = (), Reply = ()>>;
+```
+
+</details>

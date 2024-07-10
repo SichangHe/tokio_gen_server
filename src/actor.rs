@@ -211,6 +211,16 @@ pub trait Actor {
 }
 
 /// Provides convenience methods for spawning [`Actor`] instances.
+///
+/// <details>
+/// <summary>This trait is object-safe.</summary>
+///
+/// ```
+/// use tokio_gen_server::prelude::*;
+/// let _: Box<dyn ActorExt<Ref = (), Msg = (), RunResult = ()>>;
+/// ```
+///
+/// </details>
 pub trait ActorExt {
     type Ref;
     type Msg;
@@ -408,6 +418,16 @@ where
 
 /// Provides convenience methods for running [`Actor`] instances.
 /// Not intended for users.
+///
+/// <details>
+/// <summary>This trait is not object-safe.</summary>
+///
+/// ```compile_fail
+/// use tokio_gen_server::actor::ActorRunExt;
+/// let _: Box<dyn ActorRunExt<Env = (), Msg = ()>>;
+/// ```
+///
+/// </details>
 pub trait ActorRunExt {
     type Env;
     type Msg;
