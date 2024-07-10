@@ -135,7 +135,7 @@ pub trait Actor {
 
     /// Called when the actor starts.
     /// # Snippet for copying
-    /// ```rust
+    /// ```ignore
     /// async fn init(&mut self, env: &mut ActorEnv<Self>) -> Result<()> {
     ///     Ok(())
     /// }
@@ -146,7 +146,7 @@ pub trait Actor {
 
     /// Called when the actor receives a message and does not need to reply.
     /// # Snippet for copying
-    /// ```rust
+    /// ```ignore
     /// async fn handle_cast(&mut self, msg: Self::Cast, env: &mut ActorEnv<Self>) -> Result<()> {
     ///     Ok(())
     /// }
@@ -164,7 +164,7 @@ pub trait Actor {
     /// Implementations should send the reply using the `reply_sender`,
     /// otherwise the caller may hang.
     /// # Snippet for copying
-    /// ```rust
+    /// ```ignore
     /// async fn handle_call(
     ///     &mut self,
     ///     msg: Self::Call,
@@ -192,7 +192,7 @@ pub trait Actor {
     ///
     /// This method's return value would become [`ActorRunResult::exit_result`].
     /// # Snippet for copying
-    /// ```rust
+    /// ```ignore
     /// async fn before_exit(
     ///     &mut self,
     ///     run_result: Result<()>,
