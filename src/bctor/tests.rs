@@ -4,7 +4,7 @@ use crate as tokio_gen_server;
 
 // INSTRUCTION: When changed, run `bctor2bctor_and_doc.py`.
 use anyhow::{bail, Result};
-use tokio::sync::{mpsc::Receiver, oneshot};
+use tokio::sync::oneshot;
 use tokio_gen_server::prelude::*;
 
 // Define the bctor.
@@ -21,14 +21,14 @@ impl Bctor for PingPongServer {
     // All the methods are optional. The default implementations does nothing.
 
     // `init` is called when the bctor starts.
-    fn init(&mut self, _env: &mut BctorRef<Self>) -> Result<()> {
+    fn init(&mut self, _env: &mut BctorEnv<Self>) -> Result<()> {
         println!("PingPongServer starting.");
         Ok(())
     }
 
     // `handle_cast` is called when the bctor receives a message and
     // does not need to reply.
-    fn handle_cast(&mut self, msg: Self::T, _env: &mut BctorRef<Self>) -> Result<()> {
+    fn handle_cast(&mut self, msg: Self::T, _env: &mut BctorEnv<Self>) -> Result<()> {
         if matches!(msg, PingOrBang::Bang) {
             bail!("Received Bang! Blowing up.");
         }
@@ -42,7 +42,7 @@ impl Bctor for PingPongServer {
     fn handle_call(
         &mut self,
         msg: Self::L,
-        _env: &mut BctorRef<Self>,
+        _env: &mut BctorEnv<Self>,
         reply_sender: oneshot::Sender<Self::R>,
     ) -> Result<()> {
         match msg {
@@ -57,18 +57,13 @@ impl Bctor for PingPongServer {
     }
 
     // `before_exit` is called before the bctor exits.
-    fn before_exit(
-        &mut self,
-        run_result: Result<()>,
-        _env: &mut BctorRef<Self>,
-        msg_receiver: &mut Receiver<BctorMsg<Self>>,
-    ) -> Result<()> {
-        msg_receiver.close();
+    fn before_exit(&mut self, run_result: Result<()>, env: &mut BctorEnv<Self>) -> Result<()> {
+        env.msg_receiver.close();
         let result_msg = match &run_result {
             Ok(()) => "successfully".into(),
             Err(why) => {
                 let mut messages = Vec::new();
-                while let Ok(msg) = msg_receiver.try_recv() {
+                while let Ok(msg) = env.msg_receiver.try_recv() {
                     messages.push(msg);
                 }
                 format!("with error `{why:?}` and disregarded messages `{messages:?}`, ")
@@ -101,9 +96,13 @@ fn ping_pong() -> Result<()> {
     // Cancel the bctor.
     server_ref.cancel();
 
-    // The handle returns both the receiver end of the channel and
-    // the run result.
-    let (_msg_receiver, Ok(())) = handle.join().unwrap() else {
+    // The handle returns the bctor itself, its environment, and the run result.
+    let BctorRunResult {
+        bctor: PingPongServer { counter: 2 },
+        env: _,
+        exit_result: Ok(()),
+    } = handle.join().unwrap()
+    else {
         panic!("Should exit normally.")
     };
 
@@ -126,11 +125,16 @@ fn ping_pong_bang() -> Result<()> {
     }
 
     // The receiver end of the channel can be reused after the crash.
-    let (_msg_receiver, Err(why)) = handle.join().unwrap() else {
+    let BctorRunResult {
+        bctor: PingPongServer { counter: 0 },
+        env: _,
+        exit_result: Err(why),
+    } = handle.join().unwrap()
+    else {
         panic!("Should exit with error.")
     };
 
-    // The run result tells why it crashed.
+    // The exit result tells why it crashed.
     let err: String = why.downcast()?;
     assert_eq!(err, "with error `Received Bang! Blowing up.` and disregarded messages `[Call(Ping, Sender { inner: Some(Inner { state: State { is_complete: false, is_closed: false, is_rx_task_set: true, is_tx_task_set: false } }) })]`, ");
 

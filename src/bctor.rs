@@ -9,12 +9,33 @@
 use super::*;
 use std::thread::{spawn, JoinHandle};
 
-// TODO: Error type.
+/// The result when the [`Bctor`] exits.
+pub struct BctorRunResult<A: Bctor> {
+    /// The [`Bctor`] itself.
+    pub bctor: A,
+    /// The [`Bctor`]'s environment.
+    pub env: BctorEnv<A>,
+    /// The result of the [`Bctor`] exiting.
+    pub exit_result: Result<()>,
+}
+
+/// The environment the [`Bctor`] runs in.
+#[derive(Debug)]
+pub struct Env<L, T, R> {
+    /// The reference to the [`Bctor`] itself.
+    pub ref_: Ref<L, T, R>,
+    /// The [`Bctor`]'s message receiver.
+    pub msg_receiver: Receiver<Msg<L, T, R>>,
+}
+
+/// The environment the [`Bctor`] runs in.
+pub type BctorEnv<A> = Env<<A as Bctor>::L, <A as Bctor>::T, <A as Bctor>::R>;
 
 /// A reference to an instance of [`Bctor`],
 /// to cast or call messages on it or cancel it.
 #[derive(Debug)]
 pub struct Ref<L, T, R> {
+    /// A message sender to send messages to the [`Bctor`].
     pub msg_sender: Sender<Msg<L, T, R>>,
 }
 
@@ -118,12 +139,12 @@ pub trait Bctor {
     type R;
 
     /// Called when the bctor starts.
-    fn init(&mut self, _env: &mut BctorRef<Self>) -> Result<()> {
+    fn init(&mut self, _env: &mut BctorEnv<Self>) -> Result<()> {
         Ok(())
     }
 
     /// Called when the bctor receives a message and does not need to reply.
-    fn handle_cast(&mut self, _msg: Self::T, _env: &mut BctorRef<Self>) -> Result<()> {
+    fn handle_cast(&mut self, _msg: Self::T, _env: &mut BctorEnv<Self>) -> Result<()> {
         Ok(())
     }
 
@@ -134,33 +155,26 @@ pub trait Bctor {
     fn handle_call(
         &mut self,
         _msg: Self::L,
-        _env: &mut BctorRef<Self>,
+        _env: &mut BctorEnv<Self>,
         _reply_sender: oneshot::Sender<Self::R>,
     ) -> Result<()> {
         Ok(())
     }
 
     /// Called before the bctor exits.
-    fn before_exit(
-        &mut self,
-        _run_result: Result<()>,
-        _env: &mut BctorRef<Self>,
-        _msg_receiver: &mut Receiver<BctorMsg<Self>>,
-    ) -> Result<()> {
+    fn before_exit(&mut self, _run_result: Result<()>, _env: &mut BctorEnv<Self>) -> Result<()> {
         Ok(())
     }
 }
-
-pub type BctorOutput<Msg> = (Receiver<Msg>, Result<()>);
-pub type BctorHandle<Msg> = JoinHandle<BctorOutput<Msg>>;
 
 /// Provides convenience methods for spawning [`Bctor`] instances.
 pub trait BctorExt {
     type Ref;
     type Msg;
+    type RunResult;
 
     /// Spawn the bctor in a thread.
-    fn spawn(self) -> (BctorHandle<Self::Msg>, Self::Ref);
+    fn spawn(self) -> (JoinHandle<Self::RunResult>, Self::Ref);
 
     /// Same as [`BctorExt::spawn`] but with both ends of the channel given.
     /// Useful for relaying messages or reusing channels.
@@ -168,94 +182,9 @@ pub trait BctorExt {
         self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
-    ) -> (BctorHandle<Self::Msg>, Self::Ref);
+    ) -> (JoinHandle<Self::RunResult>, Self::Ref);
 
     // This comment preserves the blank line above for code generation.
-}
-
-/// Provides convenience methods for running [`Bctor`] instances.
-/// Not intended for users.
-pub trait BctorRunExt {
-    type Ref;
-    type Msg;
-
-    fn handle_call_or_cast(&mut self, msg: Self::Msg, env: &mut Self::Ref) -> Result<()>;
-
-    fn handle_continuously(
-        &mut self,
-        receiver: &mut Receiver<Self::Msg>,
-        env: &mut Self::Ref,
-    ) -> Result<()>;
-
-    fn run_and_handle_exit(
-        self,
-        env: Self::Ref,
-        msg_receiver: Receiver<Self::Msg>,
-    ) -> (Receiver<Self::Msg>, Result<()>);
-
-    fn run_till_exit(
-        &mut self,
-        env: &mut Self::Ref,
-        msg_receiver: &mut Receiver<Self::Msg>,
-    ) -> Result<()>;
-}
-
-impl<A> BctorRunExt for A
-where
-    A: Bctor,
-    BctorMsg<A>: Send,
-{
-    type Ref = BctorRef<A>;
-    type Msg = BctorMsg<A>;
-
-    fn handle_call_or_cast(&mut self, msg: Self::Msg, env: &mut Self::Ref) -> Result<()> {
-        match msg {
-            Msg::Exit => unreachable!(
-                "Exit signals should be handled before handling `handle_call_or_cast`."
-            ),
-            Msg::Call(msg, reply_sender) => self.handle_call(msg, env, reply_sender),
-            Msg::Cast(msg) => self.handle_cast(msg, env),
-        }
-    }
-
-    fn handle_continuously(
-        &mut self,
-        receiver: &mut Receiver<Self::Msg>,
-        env: &mut Self::Ref,
-    ) -> Result<()> {
-        loop {
-            let maybe_msg = receiver.blocking_recv();
-
-            let msg = match maybe_msg {
-                Some(m) => m,
-                None => return Ok(()),
-            };
-
-            match msg {
-                Msg::Exit => return Ok(()),
-                _ => self.handle_call_or_cast(msg, env)?,
-            };
-        }
-    }
-
-    fn run_and_handle_exit(
-        mut self,
-        mut env: Self::Ref,
-        mut msg_receiver: Receiver<Self::Msg>,
-    ) -> (Receiver<Self::Msg>, Result<()>) {
-        let run_result = self.run_till_exit(&mut env, &mut msg_receiver);
-        let exit_result = self.before_exit(run_result, &mut env, &mut msg_receiver);
-        (msg_receiver, exit_result)
-    }
-
-    fn run_till_exit(
-        &mut self,
-        env: &mut Self::Ref,
-        msg_receiver: &mut Receiver<Self::Msg>,
-    ) -> Result<()> {
-        self.init(env)?;
-        self.handle_continuously(msg_receiver, env)
-    }
 }
 
 impl<A> BctorExt for A
@@ -265,26 +194,95 @@ where
 {
     type Ref = BctorRef<A>;
     type Msg = BctorMsg<A>;
+    type RunResult = BctorRunResult<A>;
 
-    fn spawn(self) -> (BctorHandle<Self::Msg>, Self::Ref) {
+    fn spawn(self) -> (JoinHandle<Self::RunResult>, Self::Ref) {
         let (msg_sender, msg_receiver) = channel(8);
         self.spawn_with_channel(msg_sender, msg_receiver)
     }
 
     fn spawn_with_channel(
-        self,
+        mut self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
-    ) -> (BctorHandle<Self::Msg>, Self::Ref) {
+    ) -> (JoinHandle<Self::RunResult>, Self::Ref) {
         let bctor_ref = Ref { msg_sender };
         let handle = {
-            let env = bctor_ref.clone();
-            spawn(|| self.run_and_handle_exit(env, msg_receiver))
+            let mut env = Env {
+                ref_: bctor_ref.clone(),
+                msg_receiver,
+            };
+            spawn(move || {
+                let exit_result = self.run_and_handle_exit(&mut env);
+                BctorRunResult {
+                    bctor: self,
+                    env,
+                    exit_result,
+                }
+            })
         };
         (handle, bctor_ref)
     }
 
     // This comment preserves the blank line above for code generation.
+}
+
+/// Provides convenience methods for running [`Bctor`] instances.
+/// Not intended for users.
+pub trait BctorRunExt {
+    type Env;
+    type Msg;
+
+    fn handle_call_or_cast(&mut self, msg: Self::Msg, env: &mut Self::Env) -> Result<()>;
+
+    fn handle_continuously(&mut self, env: &mut Self::Env) -> Result<()>;
+
+    fn run_and_handle_exit(&mut self, env: &mut Self::Env) -> Result<()>;
+
+    fn run_till_exit(&mut self, env: &mut Self::Env) -> Result<()>;
+}
+
+impl<A> BctorRunExt for A
+where
+    A: Bctor,
+    BctorMsg<A>: Send,
+{
+    type Env = BctorEnv<A>;
+    type Msg = BctorMsg<A>;
+
+    fn handle_call_or_cast(&mut self, msg: Self::Msg, env: &mut Self::Env) -> Result<()> {
+        match msg {
+            Msg::Exit => unreachable!(
+                "Exit signals should be handled before handling `handle_call_or_cast`."
+            ),
+            Msg::Call(msg, reply_sender) => self.handle_call(msg, env, reply_sender),
+            Msg::Cast(msg) => self.handle_cast(msg, env),
+        }
+    }
+
+    fn handle_continuously(&mut self, env: &mut Self::Env) -> Result<()> {
+        loop {
+            let maybe_msg = env.msg_receiver.blocking_recv();
+            let msg = match maybe_msg {
+                Some(m) => m,
+                None => return Ok(()),
+            };
+            match msg {
+                Msg::Exit => return Ok(()),
+                _ => self.handle_call_or_cast(msg, env)?,
+            };
+        }
+    }
+
+    fn run_and_handle_exit(&mut self, env: &mut Self::Env) -> Result<()> {
+        let run_result = self.run_till_exit(env);
+        self.before_exit(run_result, env)
+    }
+
+    fn run_till_exit(&mut self, env: &mut Self::Env) -> Result<()> {
+        self.init(env)?;
+        self.handle_continuously(env)
+    }
 }
 
 #[cfg(test)]

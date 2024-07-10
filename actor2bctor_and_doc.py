@@ -14,10 +14,10 @@ def substitute_for_sync(text: str) -> str:
         )
         .replace(
             """select! {
-                m = receiver.recv() => m,
+                m = env.msg_receiver.recv() => m,
                 () = cancellation_token.cancelled() => return Ok(()),
             }""",
-            "receiver.blocking_recv()",
+            "env.msg_receiver.blocking_recv()",
         )
         .replace(
             """select! {
@@ -48,12 +48,34 @@ def substitute_for_sync(text: str) -> str:
         self.spawn_with_channel(msg_sender, msg_receiver)""",
         )
         .replace(
+            """
+
+    fn spawn_with_channel(
+        self,
+""",
+            """
+
+    fn spawn_with_channel(
+        mut self,
+""",
+        )
+        .replace(
             """let cancellation_token = CancellationToken::new();
         self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)""",
             """let bctor_ref = Ref { msg_sender };
         let handle = {
-            let env = bctor_ref.clone();
-            spawn(|| self.run_and_handle_exit(env, msg_receiver))
+            let mut env = Env {
+                ref_: bctor_ref.clone(),
+                msg_receiver,
+            };
+            spawn(move || {
+                let exit_result = self.run_and_handle_exit(&mut env);
+                BctorRunResult {
+                    bctor: self,
+                    env,
+                    exit_result,
+                }
+            })
         };
         (handle, bctor_ref)""",
         )
@@ -80,8 +102,10 @@ def substitute_for_sync(text: str) -> str:
         "handle.join().unwrap()",
         text,
     )
-    text = re.sub(r"\n(:?\s*///.*\n)*.*fn .*(token|join_set).*(?:\n.*[)\S])*\n", "\n", text)
-    text = re.sub(r"\n.*cancellation.*\n", "\n", text)
+    text = re.sub(
+        r"\n(:?\s*///.*\n)*.*fn .*(token|join_set).*(?:\n.*[)\S])*\n", "\n", text
+    )
+    text = re.sub(r"(?:\n\s*/// .*)*\n.*cancellation.*\n", "\n", text)
 
     # Wildcard replacements.
     text = (

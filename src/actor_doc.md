@@ -9,10 +9,7 @@ make it an actor.
 ```rust
 use anyhow::{bail, Result};
 use std::time::Duration;
-use tokio::{
-    sync::{mpsc::Receiver, oneshot},
-    time::timeout,
-};
+use tokio::{sync::oneshot, time::timeout};
 use tokio_gen_server::prelude::*;
 
 // Define the actor.
@@ -29,14 +26,14 @@ impl Actor for PingPongServer {
     // All the methods are optional. The default implementations does nothing.
 
     // `init` is called when the actor starts.
-    async fn init(&mut self, _env: &mut ActorRef<Self>) -> Result<()> {
+    async fn init(&mut self, _env: &mut ActorEnv<Self>) -> Result<()> {
         println!("PingPongServer starting.");
         Ok(())
     }
 
     // `handle_cast` is called when the actor receives a message and
     // does not need to reply.
-    async fn handle_cast(&mut self, msg: Self::T, _env: &mut ActorRef<Self>) -> Result<()> {
+    async fn handle_cast(&mut self, msg: Self::T, _env: &mut ActorEnv<Self>) -> Result<()> {
         if matches!(msg, PingOrBang::Bang) {
             bail!("Received Bang! Blowing up.");
         }
@@ -50,7 +47,7 @@ impl Actor for PingPongServer {
     async fn handle_call(
         &mut self,
         msg: Self::L,
-        _env: &mut ActorRef<Self>,
+        _env: &mut ActorEnv<Self>,
         reply_sender: oneshot::Sender<Self::R>,
     ) -> Result<()> {
         match msg {
@@ -68,15 +65,14 @@ impl Actor for PingPongServer {
     async fn before_exit(
         &mut self,
         run_result: Result<()>,
-        _env: &mut ActorRef<Self>,
-        msg_receiver: &mut Receiver<ActorMsg<Self>>,
+        env: &mut ActorEnv<Self>,
     ) -> Result<()> {
-        msg_receiver.close();
+        env.msg_receiver.close();
         let result_msg = match &run_result {
             Ok(()) => "successfully".into(),
             Err(why) => {
                 let mut messages = Vec::new();
-                while let Ok(msg) = msg_receiver.try_recv() {
+                while let Ok(msg) = env.msg_receiver.try_recv() {
                     messages.push(msg);
                 }
                 format!("with error `{why:?}` and disregarded messages `{messages:?}`, ")
@@ -109,9 +105,13 @@ async fn ping_pong() -> Result<()> {
     // Cancel the actor.
     server_ref.cancel();
 
-    // The handle returns both the receiver end of the channel and
-    // the run result.
-    let (_msg_receiver, Ok(())) = timeout(DECI_SECOND, handle).await?? else {
+    // The handle returns the actor itself, its environment, and the run result.
+    let ActorRunResult {
+        actor: PingPongServer { counter: 2 },
+        env: _,
+        exit_result: Ok(()),
+    } = timeout(DECI_SECOND, handle).await??
+    else {
         panic!("Should exit normally.")
     };
 
@@ -134,11 +134,16 @@ async fn ping_pong_bang() -> Result<()> {
     }
 
     // The receiver end of the channel can be reused after the crash.
-    let (_msg_receiver, Err(why)) = timeout(DECI_SECOND, handle).await?? else {
+    let ActorRunResult {
+        actor: PingPongServer { counter: 0 },
+        env: _,
+        exit_result: Err(why),
+    } = timeout(DECI_SECOND, handle).await??
+    else {
         panic!("Should exit with error.")
     };
 
-    // The run result tells why it crashed.
+    // The exit result tells why it crashed.
     let err: String = why.downcast()?;
     assert_eq!(err, "with error `Received Bang! Blowing up.` and disregarded messages `[Call(Ping, Sender { inner: Some(Inner { state: State { is_complete: false, is_closed: false, is_rx_task_set: true, is_tx_task_set: false } }) })]`, ");
 
