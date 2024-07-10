@@ -301,7 +301,7 @@ where
     type Msg = ActorMsg<A>;
     type RunResult = ActorRunResult<A>;
 
-    fn spawn(self) -> (JoinHandle<Self::RunResult>, Self::Ref) {
+    fn spawn(self) -> (JoinHandle<ActorRunResult<A>>, ActorRef<A>) {
         let cancellation_token = CancellationToken::new();
         self.spawn_with_token(cancellation_token)
     }
@@ -309,7 +309,7 @@ where
     fn spawn_with_token(
         self,
         cancellation_token: CancellationToken,
-    ) -> (JoinHandle<Self::RunResult>, Self::Ref) {
+    ) -> (JoinHandle<ActorRunResult<A>>, ActorRef<A>) {
         let (msg_sender, msg_receiver) = channel(8);
         self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
     }
@@ -318,7 +318,7 @@ where
         self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
-    ) -> (JoinHandle<Self::RunResult>, Self::Ref) {
+    ) -> (JoinHandle<ActorRunResult<A>>, ActorRef<A>) {
         let cancellation_token = CancellationToken::new();
         self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
     }
@@ -328,7 +328,7 @@ where
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
         cancellation_token: CancellationToken,
-    ) -> (JoinHandle<Self::RunResult>, Self::Ref) {
+    ) -> (JoinHandle<ActorRunResult<A>>, ActorRef<A>) {
         let actor_ref = Ref {
             msg_sender,
             cancellation_token,
@@ -352,8 +352,8 @@ where
 
     fn spawn_from_join_set(
         self,
-        join_set: &mut JoinSet<Self::RunResult>,
-    ) -> (AbortHandle, Self::Ref) {
+        join_set: &mut JoinSet<ActorRunResult<A>>,
+    ) -> (AbortHandle, ActorRef<A>) {
         let cancellation_token = CancellationToken::new();
         self.spawn_with_token_from_join_set(cancellation_token, join_set)
     }
@@ -361,8 +361,8 @@ where
     fn spawn_with_token_from_join_set(
         self,
         cancellation_token: CancellationToken,
-        join_set: &mut JoinSet<Self::RunResult>,
-    ) -> (AbortHandle, Self::Ref) {
+        join_set: &mut JoinSet<ActorRunResult<A>>,
+    ) -> (AbortHandle, ActorRef<A>) {
         let (msg_sender, msg_receiver) = channel(8);
         self.spawn_with_channel_and_token_from_join_set(
             msg_sender,
@@ -376,8 +376,8 @@ where
         self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
-        join_set: &mut JoinSet<Self::RunResult>,
-    ) -> (AbortHandle, Self::Ref) {
+        join_set: &mut JoinSet<ActorRunResult<A>>,
+    ) -> (AbortHandle, ActorRef<A>) {
         let cancellation_token = CancellationToken::new();
         self.spawn_with_channel_and_token_from_join_set(
             msg_sender,
@@ -392,8 +392,8 @@ where
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
         cancellation_token: CancellationToken,
-        join_set: &mut JoinSet<Self::RunResult>,
-    ) -> (AbortHandle, Self::Ref) {
+        join_set: &mut JoinSet<ActorRunResult<A>>,
+    ) -> (AbortHandle, ActorRef<A>) {
         let actor_ref = Ref {
             msg_sender,
             cancellation_token,
@@ -455,14 +455,14 @@ where
     type Env = ActorEnv<A>;
     type Msg = ActorMsg<A>;
 
-    async fn handle_call_or_cast(&mut self, msg: Self::Msg, env: &mut Self::Env) -> Result<()> {
+    async fn handle_call_or_cast(&mut self, msg: ActorMsg<A>, env: &mut ActorEnv<A>) -> Result<()> {
         match msg {
             Msg::Call(msg, reply_sender) => self.handle_call(msg, env, reply_sender).await,
             Msg::Cast(msg) => self.handle_cast(msg, env).await,
         }
     }
 
-    async fn handle_continuously(&mut self, env: &mut Self::Env) -> Result<()> {
+    async fn handle_continuously(&mut self, env: &mut ActorEnv<A>) -> Result<()> {
         let cancellation_token = env.ref_.cancellation_token.clone();
         loop {
             let maybe_msg = select! {
@@ -482,12 +482,12 @@ where
         }
     }
 
-    async fn run_and_handle_exit(&mut self, env: &mut Self::Env) -> Result<()> {
+    async fn run_and_handle_exit(&mut self, env: &mut ActorEnv<A>) -> Result<()> {
         let run_result = self.run_till_exit(env).await;
         self.before_exit(run_result, env).await
     }
 
-    async fn run_till_exit(&mut self, env: &mut Self::Env) -> Result<()> {
+    async fn run_till_exit(&mut self, env: &mut ActorEnv<A>) -> Result<()> {
         self.init(env).await?;
         self.handle_continuously(env).await
     }

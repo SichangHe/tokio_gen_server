@@ -234,7 +234,7 @@ where
     type Msg = BctorMsg<A>;
     type RunResult = BctorRunResult<A>;
 
-    fn spawn(self) -> (JoinHandle<Self::RunResult>, Self::Ref) {
+    fn spawn(self) -> (JoinHandle<BctorRunResult<A>>, BctorRef<A>) {
         let cancellation_token = CancellationToken::new();
         self.spawn_with_token(cancellation_token)
     }
@@ -242,7 +242,7 @@ where
     fn spawn_with_token(
         self,
         cancellation_token: CancellationToken,
-    ) -> (JoinHandle<Self::RunResult>, Self::Ref) {
+    ) -> (JoinHandle<BctorRunResult<A>>, BctorRef<A>) {
         let (msg_sender, msg_receiver) = channel(8);
         self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
     }
@@ -251,7 +251,7 @@ where
         self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
-    ) -> (JoinHandle<Self::RunResult>, Self::Ref) {
+    ) -> (JoinHandle<BctorRunResult<A>>, BctorRef<A>) {
         let cancellation_token = CancellationToken::new();
         self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
     }
@@ -261,7 +261,7 @@ where
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
         cancellation_token: CancellationToken,
-    ) -> (JoinHandle<Self::RunResult>, Self::Ref) {
+    ) -> (JoinHandle<BctorRunResult<A>>, BctorRef<A>) {
         let bctor_ref = Ref {
             msg_sender,
             cancellation_token,
@@ -319,7 +319,7 @@ where
     type Env = BctorEnv<A>;
     type Msg = BctorMsg<A>;
 
-    fn handle_call_or_cast(&mut self, msg: Self::Msg, env: &mut Self::Env) -> Result<()> {
+    fn handle_call_or_cast(&mut self, msg: BctorMsg<A>, env: &mut BctorEnv<A>) -> Result<()> {
         match msg {
             Msg::Exit => unreachable!(
                 "Exit signals should be handled before handling `handle_call_or_cast`."
@@ -329,7 +329,7 @@ where
         }
     }
 
-    fn handle_continuously(&mut self, env: &mut Self::Env) -> Result<()> {
+    fn handle_continuously(&mut self, env: &mut BctorEnv<A>) -> Result<()> {
         let cancellation_token = env.ref_.cancellation_token.clone();
         loop {
             if cancellation_token.is_cancelled() {
@@ -350,12 +350,12 @@ where
         }
     }
 
-    fn run_and_handle_exit(&mut self, env: &mut Self::Env) -> Result<()> {
+    fn run_and_handle_exit(&mut self, env: &mut BctorEnv<A>) -> Result<()> {
         let run_result = self.run_till_exit(env);
         self.before_exit(run_result, env)
     }
 
-    fn run_till_exit(&mut self, env: &mut Self::Env) -> Result<()> {
+    fn run_till_exit(&mut self, env: &mut BctorEnv<A>) -> Result<()> {
         self.init(env)?;
         self.handle_continuously(env)
     }
