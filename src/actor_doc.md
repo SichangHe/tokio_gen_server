@@ -19,9 +19,9 @@ struct PingPongServer {
 }
 impl Actor for PingPongServer {
     // Message types.
-    type T = PingOrBang;
-    type L = PingOrPong;
-    type R = PongOrCount;
+    type Cast = PingOrBang;
+    type Call = PingOrPong;
+    type Reply = PongOrCount;
 
     // All the methods are optional. The default implementations does nothing.
 
@@ -33,7 +33,7 @@ impl Actor for PingPongServer {
 
     // `handle_cast` is called when the actor receives a message and
     // does not need to reply.
-    async fn handle_cast(&mut self, msg: Self::T, _env: &mut ActorEnv<Self>) -> Result<()> {
+    async fn handle_cast(&mut self, msg: Self::Cast, _env: &mut ActorEnv<Self>) -> Result<()> {
         if matches!(msg, PingOrBang::Bang) {
             bail!("Received Bang! Blowing up.");
         }
@@ -46,9 +46,9 @@ impl Actor for PingPongServer {
     // needs to reply.
     async fn handle_call(
         &mut self,
-        msg: Self::L,
+        msg: Self::Call,
         _env: &mut ActorEnv<Self>,
-        reply_sender: oneshot::Sender<Self::R>,
+        reply_sender: oneshot::Sender<Self::Reply>,
     ) -> Result<()> {
         match msg {
             PingOrPong::Ping => {

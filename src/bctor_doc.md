@@ -18,9 +18,9 @@ struct PingPongServer {
 }
 impl Bctor for PingPongServer {
     // Message types.
-    type T = PingOrBang;
-    type L = PingOrPong;
-    type R = PongOrCount;
+    type Cast = PingOrBang;
+    type Call = PingOrPong;
+    type Reply = PongOrCount;
 
     // All the methods are optional. The default implementations does nothing.
 
@@ -32,7 +32,7 @@ impl Bctor for PingPongServer {
 
     // `handle_cast` is called when the bctor receives a message and
     // does not need to reply.
-    fn handle_cast(&mut self, msg: Self::T, _env: &mut BctorEnv<Self>) -> Result<()> {
+    fn handle_cast(&mut self, msg: Self::Cast, _env: &mut BctorEnv<Self>) -> Result<()> {
         if matches!(msg, PingOrBang::Bang) {
             bail!("Received Bang! Blowing up.");
         }
@@ -45,9 +45,9 @@ impl Bctor for PingPongServer {
     // needs to reply.
     fn handle_call(
         &mut self,
-        msg: Self::L,
+        msg: Self::Call,
         _env: &mut BctorEnv<Self>,
-        reply_sender: oneshot::Sender<Self::R>,
+        reply_sender: oneshot::Sender<Self::Reply>,
     ) -> Result<()> {
         match msg {
             PingOrPong::Ping => {

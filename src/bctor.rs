@@ -21,31 +21,31 @@ pub struct BctorRunResult<A: Bctor> {
 
 /// The environment the [`Bctor`] runs in.
 #[derive(Debug)]
-pub struct Env<L, T, R> {
+pub struct Env<Call, Cast, Reply> {
     /// The reference to the [`Bctor`] itself.
-    pub ref_: Ref<L, T, R>,
+    pub ref_: Ref<Call, Cast, Reply>,
     /// The [`Bctor`]'s message receiver.
-    pub msg_receiver: Receiver<Msg<L, T, R>>,
+    pub msg_receiver: Receiver<Msg<Call, Cast, Reply>>,
 }
 
 /// The environment the [`Bctor`] runs in.
-pub type BctorEnv<A> = Env<<A as Bctor>::L, <A as Bctor>::T, <A as Bctor>::R>;
+pub type BctorEnv<A> = Env<<A as Bctor>::Call, <A as Bctor>::Cast, <A as Bctor>::Reply>;
 
 /// A reference to an instance of [`Bctor`],
 /// to cast or call messages on it or cancel it.
 #[derive(Debug)]
-pub struct Ref<L, T, R> {
+pub struct Ref<Call, Cast, Reply> {
     /// A message sender to send messages to the [`Bctor`].
-    pub msg_sender: Sender<Msg<L, T, R>>,
+    pub msg_sender: Sender<Msg<Call, Cast, Reply>>,
 }
 
 /// A reference to an instance of [`Bctor`],
 /// to cast or call messages on it or cancel it.
-pub type BctorRef<A> = Ref<<A as Bctor>::L, <A as Bctor>::T, <A as Bctor>::R>;
+pub type BctorRef<A> = Ref<<A as Bctor>::Call, <A as Bctor>::Cast, <A as Bctor>::Reply>;
 
-impl<L, T, R> Ref<L, T, R> {
+impl<Call, Cast, Reply> Ref<Call, Cast, Reply> {
     /// Cast a message to the bctor and do not expect a reply.
-    pub fn cast(&self, msg: T) -> Result<(), SendError<Msg<L, T, R>>> {
+    pub fn cast(&self, msg: Cast) -> Result<(), SendError<Msg<Call, Cast, Reply>>> {
         self.msg_sender.blocking_send(Msg::Cast(msg))
     }
 
@@ -54,16 +54,16 @@ impl<L, T, R> Ref<L, T, R> {
     /// # Panics
     ///
     /// This function panics if called within an asynchronous execution context.
-    pub fn blocking_cast(&self, msg: T) -> Result<(), SendError<Msg<L, T, R>>> {
+    pub fn blocking_cast(&self, msg: Cast) -> Result<(), SendError<Msg<Call, Cast, Reply>>> {
         self.msg_sender.blocking_send(Msg::Cast(msg))
     }
 
     /// Call the bctor and wait for a reply.
     ///
     /// To time out the call, use [`tokio::time::timeout`].
-    pub fn call(&self, msg: L) -> Result<R>
+    pub fn call(&self, msg: Call) -> Result<Reply>
     where
-        Msg<L, T, R>: Send + Sync + 'static,
+        Msg<Call, Cast, Reply>: Send + Sync + 'static,
     {
         // NB: Using the `oneshot` channel here is inexpensive because its only
         // overhead is 1 `Arc` and 5 extra words of allocation.
@@ -81,9 +81,9 @@ impl<L, T, R> Ref<L, T, R> {
     /// # Panics
     ///
     /// This function panics if called within an asynchronous execution context.
-    pub fn blocking_call(&self, msg: L) -> Result<R>
+    pub fn blocking_call(&self, msg: Call) -> Result<Reply>
     where
-        Msg<L, T, R>: Send + Sync + 'static,
+        Msg<Call, Cast, Reply>: Send + Sync + 'static,
     {
         let (reply_sender, reply_receiver) = oneshot::channel();
         self.msg_sender
@@ -98,9 +98,9 @@ impl<L, T, R> Ref<L, T, R> {
     /// Useful for relaying a call from some other caller.
     pub fn relay_call(
         &self,
-        msg: L,
-        reply_sender: oneshot::Sender<R>,
-    ) -> Result<(), SendError<Msg<L, T, R>>> {
+        msg: Call,
+        reply_sender: oneshot::Sender<Reply>,
+    ) -> Result<(), SendError<Msg<Call, Cast, Reply>>> {
         self.msg_sender.blocking_send(Msg::Call(msg, reply_sender))
     }
 
@@ -110,7 +110,7 @@ impl<L, T, R> Ref<L, T, R> {
     }
 }
 
-impl<L, T, R> Clone for Ref<L, T, R> {
+impl<Call, Cast, Reply> Clone for Ref<Call, Cast, Reply> {
     fn clone(&self) -> Self {
         Self {
             msg_sender: self.msg_sender.clone(),
@@ -120,23 +120,23 @@ impl<L, T, R> Clone for Ref<L, T, R> {
 
 /// A message sent to an bctor.
 #[derive(Debug)]
-pub enum Msg<L, T, R> {
+pub enum Msg<Call, Cast, Reply> {
     Exit,
-    Call(L, oneshot::Sender<R>),
-    Cast(T),
+    Call(Call, oneshot::Sender<Reply>),
+    Cast(Cast),
 }
 
 /// A message sent to an bctor.
-pub type BctorMsg<A> = Msg<<A as Bctor>::L, <A as Bctor>::T, <A as Bctor>::R>;
+pub type BctorMsg<A> = Msg<<A as Bctor>::Call, <A as Bctor>::Cast, <A as Bctor>::Reply>;
 
 #[doc = include_str!("bctor_doc.md")]
 pub trait Bctor {
-    /// Cal***L*** message type.
-    type L;
-    /// Cas***T*** message type.
-    type T;
-    /// ***R***eply message type.
-    type R;
+    /// "Call" message for requests that anticipate replies.
+    type Call;
+    /// "Cast" message for fire-and-forget requests.
+    type Cast;
+    /// "Reply" message for replying to "call" messages.
+    type Reply;
 
     /// Called when the bctor starts.
     fn init(&mut self, _env: &mut BctorEnv<Self>) -> Result<()> {
@@ -144,7 +144,7 @@ pub trait Bctor {
     }
 
     /// Called when the bctor receives a message and does not need to reply.
-    fn handle_cast(&mut self, _msg: Self::T, _env: &mut BctorEnv<Self>) -> Result<()> {
+    fn handle_cast(&mut self, _msg: Self::Cast, _env: &mut BctorEnv<Self>) -> Result<()> {
         Ok(())
     }
 
@@ -154,9 +154,9 @@ pub trait Bctor {
     /// otherwise the caller may hang.
     fn handle_call(
         &mut self,
-        _msg: Self::L,
+        _msg: Self::Call,
         _env: &mut BctorEnv<Self>,
-        _reply_sender: oneshot::Sender<Self::R>,
+        _reply_sender: oneshot::Sender<Self::Reply>,
     ) -> Result<()> {
         Ok(())
     }

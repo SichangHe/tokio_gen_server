@@ -13,33 +13,33 @@ pub struct ActorRunResult<A: Actor> {
 
 /// The environment the [`Actor`] runs in.
 #[derive(Debug)]
-pub struct Env<L, T, R> {
+pub struct Env<Call, Cast, Reply> {
     /// The reference to the [`Actor`] itself.
-    pub ref_: Ref<L, T, R>,
+    pub ref_: Ref<Call, Cast, Reply>,
     /// The [`Actor`]'s message receiver.
-    pub msg_receiver: Receiver<Msg<L, T, R>>,
+    pub msg_receiver: Receiver<Msg<Call, Cast, Reply>>,
 }
 
 /// The environment the [`Actor`] runs in.
-pub type ActorEnv<A> = Env<<A as Actor>::L, <A as Actor>::T, <A as Actor>::R>;
+pub type ActorEnv<A> = Env<<A as Actor>::Call, <A as Actor>::Cast, <A as Actor>::Reply>;
 
 /// A reference to an instance of [`Actor`],
 /// to cast or call messages on it or cancel it.
 #[derive(Debug)]
-pub struct Ref<L, T, R> {
+pub struct Ref<Call, Cast, Reply> {
     /// A message sender to send messages to the [`Actor`].
-    pub msg_sender: Sender<Msg<L, T, R>>,
+    pub msg_sender: Sender<Msg<Call, Cast, Reply>>,
     /// A token to cancel the [`Actor`].
     pub cancellation_token: CancellationToken,
 }
 
 /// A reference to an instance of [`Actor`],
 /// to cast or call messages on it or cancel it.
-pub type ActorRef<A> = Ref<<A as Actor>::L, <A as Actor>::T, <A as Actor>::R>;
+pub type ActorRef<A> = Ref<<A as Actor>::Call, <A as Actor>::Cast, <A as Actor>::Reply>;
 
-impl<L, T, R> Ref<L, T, R> {
+impl<Call, Cast, Reply> Ref<Call, Cast, Reply> {
     /// Cast a message to the actor and do not expect a reply.
-    pub async fn cast(&self, msg: T) -> Result<(), SendError<Msg<L, T, R>>> {
+    pub async fn cast(&self, msg: Cast) -> Result<(), SendError<Msg<Call, Cast, Reply>>> {
         self.msg_sender.send(Msg::Cast(msg)).await
     }
 
@@ -48,16 +48,16 @@ impl<L, T, R> Ref<L, T, R> {
     /// # Panics
     ///
     /// This function panics if called within an asynchronous execution context.
-    pub fn blocking_cast(&self, msg: T) -> Result<(), SendError<Msg<L, T, R>>> {
+    pub fn blocking_cast(&self, msg: Cast) -> Result<(), SendError<Msg<Call, Cast, Reply>>> {
         self.msg_sender.blocking_send(Msg::Cast(msg))
     }
 
     /// Call the actor and wait for a reply.
     ///
     /// To time out the call, use [`tokio::time::timeout`].
-    pub async fn call(&self, msg: L) -> Result<R>
+    pub async fn call(&self, msg: Call) -> Result<Reply>
     where
-        Msg<L, T, R>: Send + Sync + 'static,
+        Msg<Call, Cast, Reply>: Send + Sync + 'static,
     {
         // NB: Using the `oneshot` channel here is inexpensive because its only
         // overhead is 1 `Arc` and 5 extra words of allocation.
@@ -76,9 +76,9 @@ impl<L, T, R> Ref<L, T, R> {
     /// # Panics
     ///
     /// This function panics if called within an asynchronous execution context.
-    pub fn blocking_call(&self, msg: L) -> Result<R>
+    pub fn blocking_call(&self, msg: Call) -> Result<Reply>
     where
-        Msg<L, T, R>: Send + Sync + 'static,
+        Msg<Call, Cast, Reply>: Send + Sync + 'static,
     {
         let (reply_sender, reply_receiver) = oneshot::channel();
         self.msg_sender
@@ -93,9 +93,9 @@ impl<L, T, R> Ref<L, T, R> {
     /// Useful for relaying a call from some other caller.
     pub async fn relay_call(
         &self,
-        msg: L,
-        reply_sender: oneshot::Sender<R>,
-    ) -> Result<(), SendError<Msg<L, T, R>>> {
+        msg: Call,
+        reply_sender: oneshot::Sender<Reply>,
+    ) -> Result<(), SendError<Msg<Call, Cast, Reply>>> {
         self.msg_sender.send(Msg::Call(msg, reply_sender)).await
     }
 
@@ -105,7 +105,7 @@ impl<L, T, R> Ref<L, T, R> {
     }
 }
 
-impl<L, T, R> Clone for Ref<L, T, R> {
+impl<Call, Cast, Reply> Clone for Ref<Call, Cast, Reply> {
     fn clone(&self) -> Self {
         Self {
             msg_sender: self.msg_sender.clone(),
@@ -116,22 +116,22 @@ impl<L, T, R> Clone for Ref<L, T, R> {
 
 /// A message sent to an actor.
 #[derive(Debug)]
-pub enum Msg<L, T, R> {
-    Call(L, oneshot::Sender<R>),
-    Cast(T),
+pub enum Msg<Call, Cast, Reply> {
+    Call(Call, oneshot::Sender<Reply>),
+    Cast(Cast),
 }
 
 /// A message sent to an actor.
-pub type ActorMsg<A> = Msg<<A as Actor>::L, <A as Actor>::T, <A as Actor>::R>;
+pub type ActorMsg<A> = Msg<<A as Actor>::Call, <A as Actor>::Cast, <A as Actor>::Reply>;
 
 #[doc = include_str!("actor_doc.md")]
 pub trait Actor {
-    /// Cal***L*** message type.
-    type L;
-    /// Cas***T*** message type.
-    type T;
-    /// ***R***eply message type.
-    type R;
+    /// "Call" message for requests that anticipate replies.
+    type Call;
+    /// "Cast" message for fire-and-forget requests.
+    type Cast;
+    /// "Reply" message for replying to "call" messages.
+    type Reply;
 
     /// Called when the actor starts.
     fn init(&mut self, _env: &mut ActorEnv<Self>) -> impl Future<Output = Result<()>> + Send {
@@ -141,7 +141,7 @@ pub trait Actor {
     /// Called when the actor receives a message and does not need to reply.
     fn handle_cast(
         &mut self,
-        _msg: Self::T,
+        _msg: Self::Cast,
         _env: &mut ActorEnv<Self>,
     ) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
@@ -153,9 +153,9 @@ pub trait Actor {
     /// otherwise the caller may hang.
     fn handle_call(
         &mut self,
-        _msg: Self::L,
+        _msg: Self::Call,
         _env: &mut ActorEnv<Self>,
-        _reply_sender: oneshot::Sender<Self::R>,
+        _reply_sender: oneshot::Sender<Self::Reply>,
     ) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
     }
