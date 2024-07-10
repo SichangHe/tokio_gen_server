@@ -37,6 +37,8 @@ pub type BctorEnv<A> = Env<<A as Bctor>::Call, <A as Bctor>::Cast, <A as Bctor>:
 pub struct Ref<Call, Cast, Reply> {
     /// A message sender to send messages to the [`Bctor`].
     pub msg_sender: Sender<Msg<Call, Cast, Reply>>,
+    /// A token to cancel the [`Bctor`].
+    pub cancellation_token: CancellationToken,
 }
 
 /// A reference to an instance of [`Bctor`],
@@ -106,6 +108,7 @@ impl<Call, Cast, Reply> Ref<Call, Cast, Reply> {
 
     /// Cancel the bctor referred to, so it exits.
     pub fn cancel(&self) {
+        self.cancellation_token.cancel();
         _ = self.msg_sender.blocking_send(Msg::Exit)
     }
 }
@@ -114,6 +117,7 @@ impl<Call, Cast, Reply> Clone for Ref<Call, Cast, Reply> {
     fn clone(&self) -> Self {
         Self {
             msg_sender: self.msg_sender.clone(),
+            cancellation_token: self.cancellation_token.clone(),
         }
     }
 }
@@ -195,12 +199,27 @@ pub trait BctorExt {
     /// Spawn the bctor in a thread.
     fn spawn(self) -> (JoinHandle<Self::RunResult>, Self::Ref);
 
+    /// Same as [`BctorExt::spawn`] but with the given cancellation token.
+    /// Useful for leveraging [`CancellationToken`] inheritance.
+    fn spawn_with_token(
+        self,
+        cancellation_token: CancellationToken,
+    ) -> (JoinHandle<Self::RunResult>, Self::Ref);
+
     /// Same as [`BctorExt::spawn`] but with both ends of the channel given.
     /// Useful for relaying messages or reusing channels.
     fn spawn_with_channel(
         self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
+    ) -> (JoinHandle<Self::RunResult>, Self::Ref);
+
+    /// [`BctorExt::spawn_with_channel`] + [`BctorExt::spawn_with_token`].
+    fn spawn_with_channel_and_token(
+        self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+        cancellation_token: CancellationToken,
     ) -> (JoinHandle<Self::RunResult>, Self::Ref);
 
     // This comment preserves the blank line above for code generation.
@@ -216,16 +235,37 @@ where
     type RunResult = BctorRunResult<A>;
 
     fn spawn(self) -> (JoinHandle<Self::RunResult>, Self::Ref) {
+        let cancellation_token = CancellationToken::new();
+        self.spawn_with_token(cancellation_token)
+    }
+
+    fn spawn_with_token(
+        self,
+        cancellation_token: CancellationToken,
+    ) -> (JoinHandle<Self::RunResult>, Self::Ref) {
         let (msg_sender, msg_receiver) = channel(8);
-        self.spawn_with_channel(msg_sender, msg_receiver)
+        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
     }
 
     fn spawn_with_channel(
-        mut self,
+        self,
         msg_sender: Sender<Self::Msg>,
         msg_receiver: Receiver<Self::Msg>,
     ) -> (JoinHandle<Self::RunResult>, Self::Ref) {
-        let bctor_ref = Ref { msg_sender };
+        let cancellation_token = CancellationToken::new();
+        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)
+    }
+
+    fn spawn_with_channel_and_token(
+        mut self,
+        msg_sender: Sender<Self::Msg>,
+        msg_receiver: Receiver<Self::Msg>,
+        cancellation_token: CancellationToken,
+    ) -> (JoinHandle<Self::RunResult>, Self::Ref) {
+        let bctor_ref = Ref {
+            msg_sender,
+            cancellation_token,
+        };
         let handle = {
             let mut env = Env {
                 ref_: bctor_ref.clone(),
@@ -290,12 +330,19 @@ where
     }
 
     fn handle_continuously(&mut self, env: &mut Self::Env) -> Result<()> {
+        let cancellation_token = env.ref_.cancellation_token.clone();
         loop {
+            if cancellation_token.is_cancelled() {
+                return Ok(());
+            }
             let maybe_msg = env.msg_receiver.blocking_recv();
             let msg = match maybe_msg {
                 Some(m) => m,
                 None => return Ok(()),
             };
+            if cancellation_token.is_cancelled() {
+                return Ok(());
+            }
             match msg {
                 Msg::Exit => return Ok(()),
                 _ => self.handle_call_or_cast(msg, env)?,

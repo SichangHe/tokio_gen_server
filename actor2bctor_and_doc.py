@@ -13,12 +13,15 @@ def substitute_for_sync(text: str) -> str:
             "use super::*", "use std::thread::{spawn, JoinHandle}; use super::*"
         )
         .replace(
-            """select! {
+            """let maybe_msg = select! {
                 biased;
                 () = cancellation_token.cancelled() => return Ok(()),
                 m = env.msg_receiver.recv() => m,
             }""",
-            "env.msg_receiver.blocking_recv()",
+            """if cancellation_token.is_cancelled() {
+                return Ok(());
+            }
+            let maybe_msg = env.msg_receiver.blocking_recv()""",
         )
         .replace(
             """select! {
@@ -26,7 +29,10 @@ def substitute_for_sync(text: str) -> str:
                 () = cancellation_token.cancelled() => return Ok(()),
                 maybe_ok = self.handle_call_or_cast(msg, env) => maybe_ok,
             }?""",
-            """match msg {
+            """if cancellation_token.is_cancelled() {
+                return Ok(());
+            }
+            match msg {
                 Msg::Exit => return Ok(()) ,
                 _ => self.handle_call_or_cast(msg, env)?,
             }""",
@@ -41,13 +47,8 @@ def substitute_for_sync(text: str) -> str:
         )
         .replace(
             "self.cancellation_token.cancel()",
-            "_ = self.msg_sender.blocking_send(Msg::Exit)",
-        )
-        .replace(
-            """let cancellation_token = CancellationToken::new();
-        self.spawn_with_token(cancellation_token)""",
-            """let (msg_sender, msg_receiver) = channel(8);
-        self.spawn_with_channel(msg_sender, msg_receiver)""",
+            """self.cancellation_token.cancel();
+_ = self.msg_sender.blocking_send(Msg::Exit)""",
         )
         .replace(
             """
@@ -62,24 +63,10 @@ def substitute_for_sync(text: str) -> str:
 """,
         )
         .replace(
-            """let cancellation_token = CancellationToken::new();
-        self.spawn_with_channel_and_token(msg_sender, msg_receiver, cancellation_token)""",
-            """let bctor_ref = Ref { msg_sender };
-        let handle = {
-            let mut env = Env {
-                ref_: bctor_ref.clone(),
-                msg_receiver,
-            };
-            spawn(move || {
-                let exit_result = self.run_and_handle_exit(&mut env);
-                BctorRunResult {
-                    bctor: self,
-                    env,
-                    exit_result,
-                }
-            })
-        };
-        (handle, bctor_ref)""",
+            """async move {
+                let exit_result = self.run_and_handle_exit(&mut env).await""",
+            """move || {
+                let exit_result = self.run_and_handle_exit(&mut env)""",
         )
         .replace(
             """timeout(DECI_SECOND, server_ref.call(PingOrPong::Ping)).await {
@@ -116,10 +103,7 @@ def substitute_for_sync(text: str) -> str:
         "handle.join().unwrap()",
         text,
     )
-    text = re.sub(
-        r"\n(:?\s*///.*\n)*.*fn .*(token|join_set).*(?:\n.*[)\S])*\n", "\n", text
-    )
-    text = re.sub(r"(?:\n\s*/// .*)*\n.*cancellation.*\n", "\n", text)
+    text = re.sub(r"\n(:?\s*///.*\n)*.*fn .*join_set.*(?:\n.*[)\S])*\n", "\n", text)
     text = re.sub(
         r"\n\s*/// # Snippet for copying(?:\n\s*/// .*)+?\n\s*/// ```", "", text
     )
