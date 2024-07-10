@@ -184,8 +184,10 @@ pub trait Actor {
     }
 
     /// Called before the actor exits.
-    /// There are two cases when this method is called:
+    /// There are 3 cases when this method is called:
     /// - The actor is cancelled. `run_result` would be `Ok(())`.
+    /// - All message senders are closed, so no message will be received.
+    ///     `run_result` would be `Ok(())`.
     /// - [`Actor::init`], [`Actor::handle_cast`],
     ///     or [`Actor::handle_call`] returned an error.
     ///     `run_result` would contain the error.
@@ -464,16 +466,18 @@ where
         let cancellation_token = env.ref_.cancellation_token.clone();
         loop {
             let maybe_msg = select! {
-                m = env.msg_receiver.recv() => m,
+                biased;
                 () = cancellation_token.cancelled() => return Ok(()),
+                m = env.msg_receiver.recv() => m,
             };
             let msg = match maybe_msg {
                 Some(m) => m,
                 None => return Ok(()),
             };
             select! {
-                maybe_ok = self.handle_call_or_cast(msg, env) => maybe_ok,
+                biased;
                 () = cancellation_token.cancelled() => return Ok(()),
+                maybe_ok = self.handle_call_or_cast(msg, env) => maybe_ok,
             }?;
         }
     }

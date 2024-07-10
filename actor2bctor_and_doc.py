@@ -14,15 +14,17 @@ def substitute_for_sync(text: str) -> str:
         )
         .replace(
             """select! {
-                m = env.msg_receiver.recv() => m,
+                biased;
                 () = cancellation_token.cancelled() => return Ok(()),
+                m = env.msg_receiver.recv() => m,
             }""",
             "env.msg_receiver.blocking_recv()",
         )
         .replace(
             """select! {
-                maybe_ok = self.handle_call_or_cast(msg, env) => maybe_ok,
+                biased;
                 () = cancellation_token.cancelled() => return Ok(()),
+                maybe_ok = self.handle_call_or_cast(msg, env) => maybe_ok,
             }?""",
             """match msg {
                 Msg::Exit => return Ok(()) ,
@@ -205,11 +207,18 @@ so you can gracefully shut down.
 
 ## Usage
 
-1. Determine your message types.
+1. Define your actor `struct` that stores your states and
+    implement `Actor` for it.
+1. Declare your message types.
     If your actor do not expect any "cast", set `Cast` to `()`;
     if your actor do not expect any "call",
-    set both `Call` and `Reply` to `()`;
+    set both `Call` and `Reply` to `()`.
+    > Tip: use your editor to automatically generate "required fields".
 1. Implement `handle_call` and/or `handle_cast` for your actor.
+    > Tip:
+    > use your editor to automatically generate "provided implementations",
+    > then hover on the methods you need and copy the snippets in
+    > their docstrings.
 1. Implement `init` and `before_exit` if needed.
 1. Spawn your actor with [`ActorExt::spawn`]
     or other similar methods and get the [`ActorRef`].

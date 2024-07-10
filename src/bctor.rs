@@ -162,8 +162,10 @@ pub trait Bctor {
     }
 
     /// Called before the bctor exits.
-    /// There are two cases when this method is called:
+    /// There are 3 cases when this method is called:
     /// - The bctor is cancelled. `run_result` would be `Ok(())`.
+    /// - All message senders are closed, so no message will be received.
+    ///     `run_result` would be `Ok(())`.
     /// - [`Bctor::init`], [`Bctor::handle_cast`],
     ///     or [`Bctor::handle_call`] returned an error.
     ///     `run_result` would contain the error.
