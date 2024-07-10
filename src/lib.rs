@@ -26,5 +26,8 @@ pub mod prelude {
     };
 }
 
+#[allow(unused_imports)] // For the docstring.
+use prelude::*;
+
 #[cfg(test)]
 mod tests;

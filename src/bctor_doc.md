@@ -1,10 +1,14 @@
 <!-- DO NOT modify manually! Generate with `actor2bctor_and_doc.py`. -->
 # An Elixir/Erlang-GenServer-like Blocking aCTOR
 
-`bctor` mirrors the functionality of [`actor`], but blocking.
+`Bctor` mirrors the functionality of [`Actor`], but blocking.
+Please see [`Actor`]'s documentation for the usage.
+
 Tokio channels are used for compatibility.
 
 ## Example
+
+<details>
 
 ```rust
 use anyhow::{bail, Result};
@@ -162,3 +166,5 @@ enum PongOrCount {
     Count(usize),
 }
 ```
+
+</details>

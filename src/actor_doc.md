@@ -4,7 +4,28 @@
 Define 3 message types and at least one callback handler on your struct to
 make it an actor.
 
+A GenServer-like actor simply receives messages and acts upon them.
+A message is either a "call" (request-reply) or a "cast" (fire-and-forget).
+Upon a "call" message, we call your [`Actor::handle_call`];
+upon a "cast" message, we call your [`Actor::handle_cast`].
+Upon cancellation or error, we call your [`Actor::before_exit`],
+so you can gracefully shut down.
+
+## Usage
+
+1. Determine your message types.
+    If your actor do not expect any "cast", set `Cast` to `()`;
+    if your actor do not expect any "call",
+    set both `Call` and `Reply` to `()`;
+1. Implement `handle_call` and/or `handle_cast` for your actor.
+1. Implement `init` and `before_exit` if needed.
+1. Spawn your actor with [`ActorExt::spawn`]
+    or other similar methods and get the [`ActorRef`].
+1. Use [`ActorRef`] to send messages to your actor.
+
 ## Example
+
+<details>
 
 ```rust
 use anyhow::{bail, Result};
@@ -168,3 +189,5 @@ enum PongOrCount {
 }
 const DECI_SECOND: Duration = Duration::from_millis(100);
 ```
+
+</details>

@@ -134,11 +134,23 @@ pub trait Actor {
     type Reply;
 
     /// Called when the actor starts.
+    /// # Snippet for copying
+    /// ```rust
+    /// async fn init(&mut self, env: &mut ActorEnv<Self>) -> Result<()> {
+    ///     Ok(())
+    /// }
+    /// ```
     fn init(&mut self, _env: &mut ActorEnv<Self>) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
     }
 
     /// Called when the actor receives a message and does not need to reply.
+    /// # Snippet for copying
+    /// ```rust
+    /// async fn handle_cast(&mut self, msg: Self::Cast, env: &mut ActorEnv<Self>) -> Result<()> {
+    ///     Ok(())
+    /// }
+    /// ```
     fn handle_cast(
         &mut self,
         _msg: Self::Cast,
@@ -151,6 +163,17 @@ pub trait Actor {
     ///
     /// Implementations should send the reply using the `reply_sender`,
     /// otherwise the caller may hang.
+    /// # Snippet for copying
+    /// ```rust
+    /// async fn handle_call(
+    ///     &mut self,
+    ///     msg: Self::Call,
+    ///     env: &mut ActorEnv<Self>,
+    ///     reply_sender: oneshot::Sender<Self::Reply>,
+    /// ) -> Result<()> {
+    ///     Ok(())
+    /// }
+    /// ```
     fn handle_call(
         &mut self,
         _msg: Self::Call,
@@ -161,12 +184,29 @@ pub trait Actor {
     }
 
     /// Called before the actor exits.
+    /// There are two cases when this method is called:
+    /// - The actor is cancelled. `run_result` would be `Ok(())`.
+    /// - [`Actor::init`], [`Actor::handle_cast`],
+    ///     or [`Actor::handle_call`] returned an error.
+    ///     `run_result` would contain the error.
+    ///
+    /// This method's return value would become [`ActorRunResult::exit_result`].
+    /// # Snippet for copying
+    /// ```rust
+    /// async fn before_exit(
+    ///     &mut self,
+    ///     run_result: Result<()>,
+    ///     env: &mut ActorEnv<Self>,
+    /// ) -> Result<()> {
+    ///     run_result
+    /// }
+    /// ```
     fn before_exit(
         &mut self,
-        _run_result: Result<()>,
+        run_result: Result<()>,
         _env: &mut ActorEnv<Self>,
     ) -> impl Future<Output = Result<()>> + Send {
-        async { Ok(()) }
+        async { run_result }
     }
 }
 

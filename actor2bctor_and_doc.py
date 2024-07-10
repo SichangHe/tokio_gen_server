@@ -106,12 +106,15 @@ def substitute_for_sync(text: str) -> str:
         r"\n(:?\s*///.*\n)*.*fn .*(token|join_set).*(?:\n.*[)\S])*\n", "\n", text
     )
     text = re.sub(r"(?:\n\s*/// .*)*\n.*cancellation.*\n", "\n", text)
+    text = re.sub(
+        r"\n\s*/// # Snippet for copying(?:\n\s*/// .*)+?\n\s*/// ```", "", text
+    )
+    text = re.sub(r"async { (.*) }", r"\1", text)
 
     # Wildcard replacements.
     text = (
         text.replace("Actor", "Bctor")
         .replace("actor", "bctor")
-        .replace("async { Ok(()) }", "Ok(())")
         .replace("async fn ", "fn ")
         .replace(".recv(", ".blocking_recv(")
         .replace(".await", "")
@@ -181,7 +184,28 @@ ACTOR_DOC_HEADER: Final = f"""{DOC_HEADER}
 Define 3 message types and at least one callback handler on your struct to
 make it an actor.
 
+A GenServer-like actor simply receives messages and acts upon them.
+A message is either a "call" (request-reply) or a "cast" (fire-and-forget).
+Upon a "call" message, we call your [`Actor::handle_call`];
+upon a "cast" message, we call your [`Actor::handle_cast`].
+Upon cancellation or error, we call your [`Actor::before_exit`],
+so you can gracefully shut down.
+
+## Usage
+
+1. Determine your message types.
+    If your actor do not expect any "cast", set `Cast` to `()`;
+    if your actor do not expect any "call",
+    set both `Call` and `Reply` to `()`;
+1. Implement `handle_call` and/or `handle_cast` for your actor.
+1. Implement `init` and `before_exit` if needed.
+1. Spawn your actor with [`ActorExt::spawn`]
+    or other similar methods and get the [`ActorRef`].
+1. Use [`ActorRef`] to send messages to your actor.
+
 ## Example
+
+<details>
 
 ```rust
 """
@@ -189,15 +213,21 @@ BCTOR_DOC_NAME: Final = "src/bctor_doc.md"
 BCTOR_DOC_HEADER: Final = f"""{DOC_HEADER}
 # An Elixir/Erlang-GenServer-like Blocking aCTOR
 
-`bctor` mirrors the functionality of [`actor`], but blocking.
+`Bctor` mirrors the functionality of [`Actor`], but blocking.
+Please see [`Actor`]'s documentation for the usage.
+
 Tokio channels are used for compatibility.
 
 ## Example
+
+<details>
 
 ```rust
 """
 FOOTER: Final = """
 ```
+
+</details>
 """.lstrip()
 
 

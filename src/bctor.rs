@@ -162,8 +162,15 @@ pub trait Bctor {
     }
 
     /// Called before the bctor exits.
-    fn before_exit(&mut self, _run_result: Result<()>, _env: &mut BctorEnv<Self>) -> Result<()> {
-        Ok(())
+    /// There are two cases when this method is called:
+    /// - The bctor is cancelled. `run_result` would be `Ok(())`.
+    /// - [`Bctor::init`], [`Bctor::handle_cast`],
+    ///     or [`Bctor::handle_call`] returned an error.
+    ///     `run_result` would contain the error.
+    ///
+    /// This method's return value would become [`BctorRunResult::exit_result`].
+    fn before_exit(&mut self, run_result: Result<()>, _env: &mut BctorEnv<Self>) -> Result<()> {
+        run_result
     }
 }
 
