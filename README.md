@@ -2,19 +2,32 @@
 
 A simple Elixir/Erlang-GenServer-like actor implementation on Tokio.
 
-Please see [the documentation] for more information.
+Please see [the documentation] for information on usage and examples.
 
 - Simple: Define 3 messages types and at least one callback,
     and you have an actor. No macro magic. No global "system"s or "pollution".
 - Powerful: Initialization and exit callbacks.
-    Returns channel receiver and run result on completion.
-- Blocking aCTOR (Bactor) for use with synchronous code.
+    On completion, returns the actor itself, the whole running environment,
+    and run result.
+- Lightweight: Little code. No boxing except the ones introduced by Tokio.
+- Blocking aCTOR (`Bctor`) for use with synchronous code.
 
 NB: What is a GenServer?
 A Generic Server is a persistent process that handles messages sent to it.
 That's it.
 The message can either be a cast (fire-and-forget)
 or a call (request-response).
+
+## Major difference from Erlang
+
+- **Do not panic** (crash). Return `anyhow::Error` instead.
+- Tokio scheduling is **cooperative**, not preemptive.
+    Your long-running async code should call `yield_now` in the middle so
+    they can be interrupted.
+- Blanket **supervision** implementations are **not** very **useful**.
+    Instead, let your actors spawn children actors,
+    and let children send messages to their parents using `before_exit` to
+    handle children exiting.
 
 ## Alternatives
 
