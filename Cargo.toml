@@ -12,10 +12,5 @@ repository = "https://github.com/SichangHe/tokio_gen_server"
 
 [dependencies]
 anyhow = { version = "1.0", features = ["backtrace"] }
-tokio = { version = "1", features = [
-    "macros",
-    "rt-multi-thread",
-    "sync",
-    "time",
-] }
+tokio = { version = "1", features = ["macros", "rt", "time"] }
 tokio-util = "0.7"
