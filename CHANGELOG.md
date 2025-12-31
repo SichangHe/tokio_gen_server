@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/SichangHe/tokio_gen_server/compare/v0.5.0...v0.5.1) - 2025-12-31
+
+### Fixed
+
+- *(ci)* update sccache to v0.0.9
+
+### Other
+
+- *(clippy)* mute list indentation warning
+- rid unnecessary tokio features
+- bump versions
+
 ## [0.5.0](https://github.com/SichangHe/tokio_gen_server/compare/v0.4.4...v0.5.0) - 2024-07-10
 
 ### Added
